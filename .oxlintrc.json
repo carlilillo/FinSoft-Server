@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import"],
+  "rules": {
+    "typescript/no-explicit-any": "error",
+    "typescript/no-floating-promises": "error",
+    "eqeqeq": "error",
+    "no-var": "error",
+    "prefer-const": "error"
+  },
+  "env": {
+    "node": true
+  },
+  "overrides": [
+    {
+      "files": ["src/**/domain/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "group": ["@nestjs/*", "typeorm", "@aws-sdk/*", "googleapis", "langchain", "@langchain/*", "deepagents"], "message": "The domain layer must stay framework- and I/O-free." },
+              { "group": ["**/entities/*", "**/*.service.js", "**/*.repository.js"], "message": "The domain layer must not depend on persistence or services." }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
