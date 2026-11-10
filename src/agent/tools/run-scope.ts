@@ -25,6 +25,22 @@ export function resolveRunScope(runtime: ToolRuntime): RunScope {
   return { userId, threadId };
 }
 
+export interface ImportScope {
+  userId: string;
+  /** The extraction session the imported document belongs to. */
+  runId: string;
+  /** Imported file id = this document's LangGraph thread id. */
+  importFileId: string;
+}
+
+/** Scope of a document-extractor thread: one imported PDF of a session (`run_id` in configurable). */
+export function resolveImportScope(runtime: ToolRuntime): ImportScope {
+  const { userId, threadId } = resolveRunScope(runtime);
+  const configurable = (runtime.configurable ?? runtime.config?.configurable ?? {}) as Record<string, unknown>;
+  if (typeof configurable.run_id !== 'string') throw new Error('Tool invoked outside of an import run (missing run_id)');
+  return { userId, runId: configurable.run_id, importFileId: threadId };
+}
+
 /** Emits a progress event on the "custom" stream (picked up by the run logger). */
 export function emitEvent(runtime: ToolRuntime, event: Record<string, unknown>): void {
   runtime.writer?.(event);

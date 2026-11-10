@@ -5,16 +5,19 @@ import { todoListMiddleware } from 'langchain';
 import { z } from 'zod';
 import { AppConfigService } from '../config/app-config.service.js';
 import { AgentPersistenceService } from './agent-persistence.service.js';
-import { INBOX_ROUTE, inboxNamespace } from './files/inbox-paths.js';
+import { INBOX_ROUTE, UPLOADS_ROUTE, type WorkspaceArea, workspaceNamespace } from './files/workspace-paths.js';
 import { nativeFileResultsMiddleware } from './middleware/native-file-results.middleware.js';
+import { DOCUMENT_EXTRACTOR_AGENT_NAME, DOCUMENT_EXTRACTOR_SYSTEM_PROMPT } from './prompts/document-extractor.prompt.js';
 import { EXTRACTOR_AGENT_NAME, EXTRACTOR_DESCRIPTION, EXTRACTOR_SYSTEM_PROMPT } from './prompts/extractor.prompt.js';
 import { TRIAGE_AGENT_NAME, TRIAGE_SYSTEM_PROMPT } from './prompts/triage.prompt.js';
 import { AgentToolsFactory } from './tools/agent-tools.factory.js';
 
 export const agentContextSchema = z.object({ userId: z.string() });
 
-/** The inbox holds the user's original emails and attachments: the model reads them but never changes them. */
-const WORKSPACE_PERMISSIONS = [{ operations: ['write' as const], paths: ['/inbox/**'], mode: 'deny' as const }];
+/** The inbox and uploads hold the user's original documents: the model reads them but never changes them. */
+const WORKSPACE_PERMISSIONS = [
+  { operations: ['write' as const], paths: ['/inbox/**', '/uploads/**'], mode: 'deny' as const },
+];
 
 @Injectable()
 export class InvoiceAgentFactory {
@@ -44,22 +47,42 @@ export class InvoiceAgentFactory {
       contextSchema: agentContextSchema,
       checkpointer: this.persistence.checkpointer,
       store: this.persistence.store,
-      backend: () => this.createBackend(),
+      backend: () => this.createBackend(INBOX_ROUTE, 'inbox'),
       permissions: WORKSPACE_PERMISSIONS,
     });
   }
 
   /**
-   * Scratch files and todos live in thread state (persisted by the Postgres checkpointer);
-   * `/inbox/` is routed to the Postgres store, namespaced by user and thread (no cross-thread memory).
+   * Extracts ONE imported PDF per thread: no inbox, no triage, no subagent. Its thread id is the
+   * imported file id and `run_id` (configurable) is the extraction session it belongs to.
    */
-  private createBackend(): CompositeBackend {
+  createDocumentExtractor() {
+    return createDeepAgent({
+      name: DOCUMENT_EXTRACTOR_AGENT_NAME,
+      model: this.createModel(),
+      systemPrompt: DOCUMENT_EXTRACTOR_SYSTEM_PROMPT,
+      tools: this.tools.documentExtractorTools(),
+      middleware: [todoListMiddleware(), nativeFileResultsMiddleware()],
+      contextSchema: agentContextSchema,
+      checkpointer: this.persistence.checkpointer,
+      store: this.persistence.store,
+      backend: () => this.createBackend(UPLOADS_ROUTE, 'uploads'),
+      permissions: WORKSPACE_PERMISSIONS,
+    });
+  }
+
+  /**
+   * Scratch files and todos live in thread state (persisted by the Postgres checkpointer); the
+   * documents route (`/inbox/` or `/uploads/`) goes to the Postgres store, namespaced by user and
+   * thread (no cross-thread memory).
+   */
+  private createBackend(route: string, area: WorkspaceArea): CompositeBackend {
     return new CompositeBackend(new StateBackend(), {
-      [INBOX_ROUTE]: new StoreBackend({
+      [route]: new StoreBackend({
         store: this.persistence.store,
         namespace: ({ config }) => {
           const configurable = config?.configurable ?? {};
-          return inboxNamespace(String(configurable.user_id), String(configurable.thread_id));
+          return workspaceNamespace(area, String(configurable.user_id), String(configurable.thread_id));
         },
       }),
     });
@@ -77,3 +100,4 @@ export class InvoiceAgentFactory {
 }
 
 export type InvoiceAgent = ReturnType<InvoiceAgentFactory['create']>;
+export type DocumentExtractorAgent = ReturnType<InvoiceAgentFactory['createDocumentExtractor']>;

@@ -1,6 +1,6 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryColumn } from 'typeorm';
 import { bigintToNumber, CLERK_USER_ID_COLUMN, ULID_COLUMN } from '../../database/column-types.js';
-import type { DocumentSource, DocumentStatus } from '../domain/invoice-document.js';
+import type { DocumentSource } from '../domain/invoice-document.js';
 
 @Entity('invoice_documents')
 @Index(['invoiceId', 'sha256'], { unique: true, where: '"sha256" IS NOT NULL' })
@@ -26,15 +26,12 @@ export class InvoiceDocumentEntity {
   @Column({ name: 'size_bytes', type: 'bigint', transformer: bigintToNumber })
   sizeBytes: number;
 
-  /** Null until a presigned upload is confirmed (agent uploads hash immediately). */
+  /** Null only on documents stored before content hashing was mandatory. */
   @Column({ type: 'char', length: 64, nullable: true })
   sha256: string | null;
 
   @Column({ type: 'varchar', length: 16 })
   source: DocumentSource;
-
-  @Column({ type: 'varchar', length: 16 })
-  status: DocumentStatus;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

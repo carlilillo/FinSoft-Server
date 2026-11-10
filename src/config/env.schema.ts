@@ -33,6 +33,8 @@ export const envSchema = z.object({
 
   OPENAI_API_KEY: z.string().min(1),
   OPENAI_MODEL: z.string().min(1).default('gpt-5.5'),
+  /** Analyses (Gmail or imports) processed at the same time by this server. */
+  ANALYSIS_WORKER_CONCURRENCY: z.coerce.number().int().positive().max(20).default(3),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -41,9 +41,10 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
     await this.boss.send(queue, data, singletonKey ? { singletonKey } : {});
   }
 
-  async work<T extends object>(queue: string, handler: JobHandler<T>): Promise<void> {
+  /** `concurrency` jobs of the queue are handled at the same time on this node, one per worker. */
+  async work<T extends object>(queue: string, handler: JobHandler<T>, concurrency = 1): Promise<void> {
     await this.ensureQueue(queue);
-    await this.boss.work<T>(queue, { batchSize: 1 }, async ([job]) => {
+    await this.boss.work<T>(queue, { batchSize: 1, localConcurrency: concurrency }, async ([job]) => {
       if (!job) return;
       await handler(job.data, { retryCount: (job as { retryCount?: number }).retryCount ?? 0 });
     });

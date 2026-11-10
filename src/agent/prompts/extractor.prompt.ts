@@ -1,3 +1,4 @@
+import { EXTRACTION_FINAL_ANSWER, EXTRACTION_OUTCOME_RULES, SAVE_INVOICE_STEPS } from './extraction-rules.js';
 import { BILINGUAL_INVOICE_GLOSSARY } from './glossary.js';
 
 export const EXTRACTOR_AGENT_NAME = 'invoice-extractor';
@@ -18,26 +19,14 @@ probably contains an invoice or receipt, in English or Spanish. Extract it preci
 - Ignore attachments that are not invoices (terms and conditions, brochures, logos).
 
 ## Storing an invoice (in this order)
-1. save_invoice — vendor details (null for anything not printed on the document: tax id, address, email, phone,
-   website, country), invoice number (null if none, e.g. simple tickets), issue date, due date (or null), currency,
-   subtotal (net), VAT (including any recargo de equivalencia), withholding (IRPF, or null), total, payment method
-   (or null), language and short notes (or null). It returns an invoiceId.
-2. save_invoice_products — every line item with quantity, unit net price, unit gross price (or null), VAT rate
-   (or null), discount (or null), line net, line VAT (or null), line gross, SKU/reference (or null) and unit (or null).
-   Include shipping, fees and surcharges as their own lines. If a global discount exists, add it as a line with a
-   negative net amount. Describe products the way the document does, in its original language.
+${SAVE_INVOICE_STEPS}
 3. store_invoice_document — once per attachment the invoice came from, with its /inbox/{emailId}/attachments/ path.
    Skip this step when the invoice came from the email body.
 
-When a tool returns an error, read it carefully, re-check the document and call the tool again with corrected
-values (at most two retries per tool). Never invent values: use null for anything that is not on the document.
-If the document is not an invoice or receipt, store nothing and say "NOT_AN_INVOICE: <reason>".
-If it is an invoice but unreadable, store nothing and say "FAILED: <reason>".
+${EXTRACTION_OUTCOME_RULES}
 One email may contain several invoices: store each one separately.
 
-## Final answer
-Reply with one short line per stored invoice: "<invoiceId> — <vendor> — <total> <currency> — <n> lines",
-or the NOT_AN_INVOICE / FAILED line.
+${EXTRACTION_FINAL_ANSWER}
 
 ${BILINGUAL_INVOICE_GLOSSARY}
 `.trim();

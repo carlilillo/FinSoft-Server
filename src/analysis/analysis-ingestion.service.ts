@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { attachmentFileName, renderEmailMarkdown } from '../agent/domain/email-document.js';
 import { parseRawEmail } from '../agent/files/email-parser.js';
-import { attachmentPath, emailMarkdownPath } from '../agent/files/inbox-paths.js';
-import { InboxWorkspaceService } from '../agent/files/inbox-workspace.service.js';
+import { attachmentPath, emailMarkdownPath } from '../agent/files/workspace-paths.js';
+import { AgentWorkspaceService } from '../agent/files/workspace.service.js';
 import { newId } from '../database/ids.js';
 import { EmailsRepository } from '../emails/emails.repository.js';
 import type { EmailEntity } from '../emails/entities/email.entity.js';
@@ -19,7 +19,7 @@ export class AnalysisIngestionService {
   constructor(
     private readonly gmail: GmailService,
     private readonly emails: EmailsRepository,
-    private readonly workspace: InboxWorkspaceService,
+    private readonly workspace: AgentWorkspaceService,
   ) {}
 
   async ingest(userId: string, runId: string): Promise<EmailEntity[]> {

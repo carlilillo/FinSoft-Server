@@ -15,9 +15,11 @@ export interface InvoiceProvenance {
   userId: string;
   runId: string | null;
   emailId: string | null;
+  /** The imported PDF the invoice was read from, when it did not come from an email. */
+  importFileId: string | null;
 }
 
-/** Write side used by the extraction agent. Idempotent so re-running a thread never duplicates data. */
+/** Write side used by the extraction agents. Idempotent so re-running a thread never duplicates data. */
 @Injectable()
 export class InvoiceWriterService {
   constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
@@ -52,6 +54,7 @@ export class InvoiceWriterService {
         vendorId: vendor.id,
         runId: provenance.runId ?? existing?.runId ?? null,
         emailId: provenance.emailId ?? existing?.emailId ?? null,
+        importFileId: provenance.importFileId ?? existing?.importFileId ?? null,
       });
       await manager.save(InvoiceEntity, invoice);
       return { invoiceId: invoice.id, vendorId: vendor.id, created: !existing };

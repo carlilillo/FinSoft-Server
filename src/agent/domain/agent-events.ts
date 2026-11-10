@@ -3,7 +3,10 @@
  * to flat, human-readable log events. Nothing here touches I/O.
  */
 
-export type AgentName = 'invoice-triage' | 'invoice-extractor';
+export type AgentName = 'invoice-triage' | 'invoice-extractor' | 'document-extractor';
+
+/** The agent at the root of the graph: the inbox coordinator, or the extractor of an imported document. */
+export type RootAgentName = Exclude<AgentName, 'invoice-extractor'>;
 
 export type AgentLogEvent =
   | { event: 'agent.message'; agent: AgentName; text: string }
@@ -31,12 +34,18 @@ interface TodoLike {
   status?: string;
 }
 
-export function agentForNamespace(namespace: string[]): AgentName {
-  return namespace.some((segment) => segment.startsWith('tools:') || segment.startsWith('task')) ? 'invoice-extractor' : 'invoice-triage';
+export function agentForNamespace(namespace: string[], root: RootAgentName = 'invoice-triage'): AgentName {
+  if (root === 'document-extractor') return root;
+  return namespace.some((segment) => segment.startsWith('tools:') || segment.startsWith('task')) ? 'invoice-extractor' : root;
 }
 
-export function mapAgentChunk(namespace: string[], mode: string, data: unknown): AgentLogEvent[] {
-  const agent = agentForNamespace(namespace);
+export function mapAgentChunk(
+  namespace: string[],
+  mode: string,
+  data: unknown,
+  root: RootAgentName = 'invoice-triage',
+): AgentLogEvent[] {
+  const agent = agentForNamespace(namespace, root);
   if (mode === 'custom') return isRecord(data) ? [{ event: 'custom', agent, payload: data }] : [];
   if (mode !== 'updates' || !isRecord(data)) return [];
 

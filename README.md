@@ -6,7 +6,7 @@ extract invoices (English and Spanish), and serves invoices, products, price his
 ## Stack
 
 NestJS 12 (ESM) · TypeORM + PostgreSQL · pg-boss (jobs on the same Postgres) · LangChain `deepagents` + OpenAI ·
-LangGraph Postgres checkpointer & store · S3 (presigned upload/download) · Clerk (networkless JWT verification) · Vitest.
+LangGraph Postgres checkpointer & store · S3 (server-side writes, presigned downloads) · Clerk (networkless JWT verification) · Vitest.
 
 ## Getting started
 
@@ -29,7 +29,7 @@ pnpm start:dev         # runs migrations on boot, creates the langgraph + pgboss
 - **Google Cloud**: OAuth client of type *Web application*, authorized redirect URI = `GOOGLE_REDIRECT_URI`
   (`http://localhost:3000/gmail/oauth/callback` in dev). Enable the Gmail API. `gmail.readonly` is a restricted
   scope: keep the app in *Testing* and add your account as a test user until Google verifies it.
-- **S3**: a private bucket. For browser uploads add a CORS rule allowing `PUT` from the client origin.
+- **S3**: a private bucket (the browser never writes to it; downloads use presigned GET URLs).
 
 ## Architecture
 
@@ -40,9 +40,9 @@ src/
 ├── database/      TypeORM options, ULID ids, migrations
 ├── users/         ensure-user interceptor, GET/DELETE /me (full account removal)
 ├── gmail/         OAuth consent URL, connection status, last-week raw (.eml) fetch with backoff
-├── analysis/      runs (= LangGraph thread ids), background processor, consent callback → run page
+├── analysis/      runs (Gmail or imported PDFs), background processor, consent callback → run page
 ├── agent/         deep agent, subagent, tools, prompts (EN/ES), Postgres persistence, run logger
-├── emails/ invoices/ products/ documents/ insights/   feature modules
+├── emails/ imports/ invoices/ products/ documents/ insights/   feature modules
 └── jobs/          pg-boss queue
 ```
 
@@ -62,7 +62,21 @@ invoice-triage (main deep agent, todo middleware)
   ├─ reads /inbox/{emailId}/email.md (body text only) → record_triage
   └─ task → invoice-extractor (subagent, todo middleware)
         read_file → save_invoice → save_invoice_products → store_invoice_document
+
+document-extractor (imported PDFs: one thread per document, no triage, no subagent)
+  └─ read_file /uploads/{name}.pdf → save_invoice → save_invoice_products
 ```
+
+- **Imports.** `POST /analyses/imports` (multipart `files`, 1–10 PDFs, 20 MB each, checked by declared type
+  *and* `%PDF-` signature) creates an extraction session with `source = 'upload'`. Each PDF is written to
+  `/uploads/` in the workspace of its own thread (thread id = `import_files.id`) and the pg-boss job runs one
+  **batch** of the document extractor, one element per PDF (5 at a time; one failing never stops the others).
+  The server then attaches the original PDF to every invoice read from it (`invoice_documents.source = 'import'`)
+  and records each file's outcome (`extracted`, `not_invoice`, `failed`) from the stored invoices and the
+  extractor's final `NOT_AN_INVOICE:` / `FAILED:` line. Import sessions cannot be re-run with a selection.
+- **At most 3 analyses in progress per user** (`MAX_ACTIVE_RUNS`, Gmail and imports together). Run creation
+  takes a per-user Postgres advisory lock so concurrent requests can't exceed it (`RUN_LIMIT_REACHED`, 409),
+  and the worker handles `ANALYSIS_WORKER_CONCURRENCY` (default 3) jobs at the same time.
 
 - **Files, not prompts.** Ingestion writes each email body and its original attachments into the agent's
   filesystem under `/inbox/`, which `CompositeBackend` routes to a `StoreBackend` on **PostgresStore**,
@@ -89,10 +103,10 @@ invoice-triage (main deep agent, todo middleware)
 | GET | `/gmail/oauth/callback` | public; stores the grant, starts a run, 302 → `CLIENT_URL/analyses/:id` |
 | GET / DELETE | `/gmail/connection` | status / disconnect |
 | POST / GET | `/analyses` | start (202) / history |
+| POST | `/analyses/imports` | multipart `files` (1–10 PDFs): new extraction session from imported invoices (202) |
 | GET | `/analyses/:id` | status, progress and, when finished, the session (totals, invoices, products, evaluated emails) |
 | POST | `/analyses/:id/continue` | `{ emailIds, note? }` re-run the same thread with the real invoice emails (202) |
 | GET | `/invoices`, `/invoices/:id` | list (search, vendor, run, date range) / detail with lines and documents |
 | GET | `/products`, `/products/:id` | catalog / detail with price history |
-| POST | `/documents/upload-url`, `/documents/:id/confirm` | presigned PUT upload |
 | GET | `/documents/:id/download-url` | presigned GET (5 min) |
 | GET | `/insights/spend?range=7d\|14d\|30d`, `/insights/summary` | dashboard |

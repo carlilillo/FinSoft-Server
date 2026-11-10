@@ -13,6 +13,7 @@ import { DocumentsModule } from './documents/documents.module.js';
 import { EmailsModule } from './emails/emails.module.js';
 import { GmailModule } from './gmail/gmail.module.js';
 import { HealthModule } from './health/health.module.js';
+import { ImportsModule } from './imports/imports.module.js';
 import { InsightsModule } from './insights/insights.module.js';
 import { InvoicesModule } from './invoices/invoices.module.js';
 import { JobsModule } from './jobs/jobs.module.js';
@@ -40,6 +41,7 @@ import { UsersModule } from './users/users.module.js';
     UsersModule,
     GmailModule,
     EmailsModule,
+    ImportsModule,
     InvoicesModule,
     ProductsModule,
     DocumentsModule,

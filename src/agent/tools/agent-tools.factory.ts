@@ -4,11 +4,12 @@ import { DocumentsService } from '../../documents/documents.service.js';
 import { EmailsRepository } from '../../emails/emails.repository.js';
 import { InvoiceWriterService } from '../../invoices/invoice-writer.service.js';
 import { EmailNotInRunError, InvalidWorkspacePathError } from '../domain/agent-tool.errors.js';
-import { emailIdFromPath } from '../files/inbox-paths.js';
-import { InboxWorkspaceService } from '../files/inbox-workspace.service.js';
-import { asToolResult, emitEvent, resolveRunScope, type RunScope } from './run-scope.js';
+import { emailIdFromPath } from '../files/workspace-paths.js';
+import { AgentWorkspaceService } from '../files/workspace.service.js';
+import { asToolResult, emitEvent, resolveImportScope, resolveRunScope, type RunScope } from './run-scope.js';
 import {
   recordTriageSchema,
+  saveImportedInvoiceSchema,
   saveInvoiceProductsSchema,
   saveInvoiceSchema,
   storeInvoiceDocumentSchema,
@@ -21,7 +22,7 @@ export class AgentToolsFactory {
     private readonly emails: EmailsRepository,
     private readonly writer: InvoiceWriterService,
     private readonly documents: DocumentsService,
-    private readonly workspace: InboxWorkspaceService,
+    private readonly workspace: AgentWorkspaceService,
   ) {}
 
   triageTools() {
@@ -30,6 +31,11 @@ export class AgentToolsFactory {
 
   extractorTools() {
     return [this.saveInvoice(), this.saveInvoiceProducts(), this.storeInvoiceDocument()];
+  }
+
+  /** Imported PDFs: the server attaches the original document itself once the thread finishes. */
+  documentExtractorTools() {
+    return [this.saveImportedInvoice(), this.saveInvoiceProducts()];
   }
 
   private recordTriage() {
@@ -61,7 +67,10 @@ export class AgentToolsFactory {
           const scope = resolveRunScope(runtime);
           await this.assertEmailInRun(scope, input.emailId);
           const { emailId, ...invoice } = input;
-          const saved = await this.writer.saveInvoice({ userId: scope.userId, runId: scope.threadId, emailId }, invoice);
+          const saved = await this.writer.saveInvoice(
+            { userId: scope.userId, runId: scope.threadId, emailId, importFileId: null },
+            invoice,
+          );
           emitEvent(runtime, { event: 'invoice.saved', invoiceId: saved.invoiceId, created: saved.created });
           return saved.created
             ? `Saved invoice ${saved.invoiceId}. Now call save_invoice_products with invoiceId ${saved.invoiceId}.`
@@ -71,6 +80,28 @@ export class AgentToolsFactory {
         name: 'save_invoice',
         description: 'Store the invoice header and vendor. Amounts are decimal strings; returns the invoiceId.',
         schema: saveInvoiceSchema,
+      },
+    );
+  }
+
+  private saveImportedInvoice() {
+    return tool(
+      (input, runtime: ToolRuntime) =>
+        asToolResult(async () => {
+          const scope = resolveImportScope(runtime);
+          const saved = await this.writer.saveInvoice(
+            { userId: scope.userId, runId: scope.runId, emailId: null, importFileId: scope.importFileId },
+            input,
+          );
+          emitEvent(runtime, { event: 'invoice.saved', invoiceId: saved.invoiceId, created: saved.created });
+          return saved.created
+            ? `Saved invoice ${saved.invoiceId}. Now call save_invoice_products with invoiceId ${saved.invoiceId}.`
+            : `Invoice already existed and was updated: ${saved.invoiceId}. Call save_invoice_products to refresh its lines.`;
+        }),
+      {
+        name: 'save_invoice',
+        description: 'Store the invoice header and vendor. Amounts are decimal strings; returns the invoiceId.',
+        schema: saveImportedInvoiceSchema,
       },
     );
   }
@@ -106,7 +137,8 @@ export class AgentToolsFactory {
           if (!file) return `Error: ${input.path} does not exist.`;
 
           const bytes = typeof file.content === 'string' ? new TextEncoder().encode(file.content) : file.content;
-          const stored = await this.documents.storeFromEmail({
+          const stored = await this.documents.storeOriginal({
+            source: 'email',
             userId: scope.userId,
             invoiceId: input.invoiceId,
             fileName: input.path.split('/').pop() ?? 'document',

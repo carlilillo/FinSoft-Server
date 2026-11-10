@@ -3,7 +3,7 @@ import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import { PostgresStore } from '@langchain/langgraph-checkpoint-postgres/store';
 import { AppConfigService } from '../config/app-config.service.js';
 import { BinarySafeStore } from './binary-safe-store.js';
-import { userNamespacePrefix } from './files/inbox-paths.js';
+import { userNamespacePrefix } from './files/workspace-paths.js';
 
 const LANGGRAPH_SCHEMA = 'langgraph';
 

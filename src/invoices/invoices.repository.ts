@@ -68,6 +68,12 @@ export class InvoicesRepository {
     });
   }
 
+  findIdsForImportFile(userId: string, importFileId: string): Promise<string[]> {
+    return this.repo
+      .find({ where: { userId, importFileId }, select: { id: true } })
+      .then((rows) => rows.map((row) => row.id));
+  }
+
   findForSpend(userId: string, from: string, to: string): Promise<Array<Pick<InvoiceEntity, 'issueDate' | 'currency' | 'totalCents'>>> {
     return this.repo
       .createQueryBuilder('invoice')

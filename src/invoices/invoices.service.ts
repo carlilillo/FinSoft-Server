@@ -30,7 +30,7 @@ export class InvoicesService {
     const invoice = await this.invoices.findDetail(userId, id);
     if (!invoice?.vendor) throw new NotFoundException(`Invoice ${id} not found`);
     const documents = await this.documents.find({
-      where: { invoiceId: id, userId, status: 'available' },
+      where: { invoiceId: id, userId },
       order: { createdAt: 'ASC' },
     });
     return {

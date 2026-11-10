@@ -1,25 +1,22 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash } from 'node:crypto';
 import { Repository } from 'typeorm';
 import { newId } from '../database/ids.js';
-import { toDocumentView } from '../invoices/dto/invoice.views.js';
-import { InvoicesRepository } from '../invoices/invoices.repository.js';
 import { StorageService } from '../storage/storage.service.js';
-import { assertConfirmable, assertUploadAllowed, buildDocumentKey } from './domain/invoice-document.js';
-import type { CreateUploadUrlDto } from './dto/create-upload-url.dto.js';
+import { buildDocumentKey, type DocumentSource } from './domain/invoice-document.js';
 import { InvoiceDocumentEntity } from './entities/invoice-document.entity.js';
 
 @Injectable()
 export class DocumentsService {
   constructor(
     @InjectRepository(InvoiceDocumentEntity) private readonly documents: Repository<InvoiceDocumentEntity>,
-    private readonly invoices: InvoicesRepository,
     private readonly storage: StorageService,
   ) {}
 
-  /** Server-side upload used by the extraction agent. Same bytes on the same invoice are stored once. */
-  async storeFromEmail(props: {
+  /** Stores the original document an invoice was read from. Same bytes on the same invoice are stored once. */
+  async storeOriginal(props: {
+    source: DocumentSource;
     userId: string;
     invoiceId: string;
     fileName: string;
@@ -42,56 +39,14 @@ export class DocumentsService {
       mimeType: props.mimeType,
       sizeBytes: props.bytes.byteLength,
       sha256,
-      source: 'email',
-      status: 'available',
+      source: props.source,
     });
     return { documentId: id, duplicate: false };
   }
 
-  async createUploadUrl(userId: string, dto: CreateUploadUrlDto) {
-    const invoice = await this.invoices.findOwned(userId, dto.invoiceId);
-    if (!invoice) throw new NotFoundException(`Invoice ${dto.invoiceId} not found`);
-    assertUploadAllowed({ mimeType: dto.contentType, sizeBytes: dto.sizeBytes });
-
-    const id = newId();
-    const s3Key = buildDocumentKey({ userId, invoiceId: invoice.id, documentId: id, fileName: dto.fileName });
-    await this.documents.insert({
-      id,
-      invoiceId: invoice.id,
-      userId,
-      s3Key,
-      fileName: dto.fileName,
-      mimeType: dto.contentType,
-      sizeBytes: dto.sizeBytes,
-      sha256: null,
-      source: 'upload',
-      status: 'pending_upload',
-    });
-    const uploadUrl = await this.storage.presignUpload(s3Key, dto.contentType, dto.sizeBytes);
-    return { documentId: id, uploadUrl, method: 'PUT' as const, headers: { 'Content-Type': dto.contentType } };
-  }
-
-  async confirmUpload(userId: string, documentId: string) {
-    const document = await this.findOwned(userId, documentId);
-    assertConfirmable(document.status);
-    const size = await this.storage.getObjectSize(document.s3Key);
-    if (size === null) throw new BadRequestException('The file has not been uploaded yet');
-
-    document.status = 'available';
-    document.sizeBytes = size;
-    await this.documents.save(document);
-    return toDocumentView(document);
-  }
-
   async downloadUrl(userId: string, documentId: string) {
-    const document = await this.findOwned(userId, documentId);
-    if (document.status !== 'available') throw new NotFoundException(`Document ${documentId} not found`);
-    return { url: await this.storage.presignDownload(document.s3Key, document.fileName), expiresInSeconds: 300 };
-  }
-
-  private async findOwned(userId: string, documentId: string): Promise<InvoiceDocumentEntity> {
     const document = await this.documents.findOne({ where: { id: documentId, userId } });
     if (!document) throw new NotFoundException(`Document ${documentId} not found`);
-    return document;
+    return { url: await this.storage.presignDownload(document.s3Key, document.fileName), expiresInSeconds: 300 };
   }
 }

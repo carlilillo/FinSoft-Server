@@ -40,4 +40,10 @@ describe('mapAgentChunk', () => {
     ]);
     expect(mapAgentChunk([], 'messages', {})).toEqual([]);
   });
+
+  it('attributes every chunk of an imported-document thread to the document extractor', () => {
+    const message = { type: 'ai', content: 'NOT_AN_INVOICE: a quote', tool_calls: [] };
+    const [event] = mapAgentChunk(['tools:abc'], 'updates', { model_request: { messages: [message] } }, 'document-extractor');
+    expect(event).toMatchObject({ event: 'agent.message', agent: 'document-extractor', text: 'NOT_AN_INVOICE: a quote' });
+  });
 });

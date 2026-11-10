@@ -14,12 +14,16 @@ export class InvoiceEntity {
   @Column({ ...CLERK_USER_ID_COLUMN, name: 'user_id' })
   userId: string;
 
-  /** LangGraph thread id of the analysis run that extracted this invoice. */
+  /** The extraction session (analysis run) that extracted this invoice. */
   @Column({ ...ULID_COLUMN, name: 'run_id', nullable: true })
   runId: string | null;
 
   @Column({ ...ULID_COLUMN, name: 'email_id', nullable: true })
   emailId: string | null;
+
+  /** Imported PDF the invoice was read from (manual imports have no email). */
+  @Column({ ...ULID_COLUMN, name: 'import_file_id', nullable: true })
+  importFileId: string | null;
 
   @Column({ ...ULID_COLUMN, name: 'vendor_id' })
   vendorId: string;

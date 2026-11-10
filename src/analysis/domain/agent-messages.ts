@@ -17,6 +17,14 @@ export function buildStartMessage(emails: EmailReference[]): string {
   ].join('\n');
 }
 
+/** First message of an imported document's thread: the path only; the extractor reads the PDF itself. */
+export function buildDocumentMessage(workspacePath: string, originalName: string): string {
+  return [
+    `I imported this invoice by hand: ${workspacePath} (original file name "${originalName}").`,
+    'Extract every invoice it contains and store them.',
+  ].join('\n');
+}
+
 /** The user's correction, sent on the same thread so the agent keeps its earlier context. */
 export function buildContinuationMessage(plan: ContinuationPlan, emails: EmailReference[], note: string | null): string {
   const describe = (id: string) => {

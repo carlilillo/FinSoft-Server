@@ -62,3 +62,6 @@ export const storeInvoiceDocumentSchema = z.object({
   invoiceId: ulid.describe('Returned by save_invoice'),
   path: z.string().describe('Attachment path, e.g. /inbox/{emailId}/attachments/factura.pdf'),
 });
+
+/** Imported PDFs have no email: the session and file come from the runtime. */
+export const saveImportedInvoiceSchema = saveInvoiceSchema.omit({ emailId: true });
