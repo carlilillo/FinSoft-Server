@@ -4,12 +4,10 @@ import { DocumentsService } from '../../documents/documents.service.js';
 import { EmailsRepository } from '../../emails/emails.repository.js';
 import { InvoiceWriterService } from '../../invoices/invoice-writer.service.js';
 import { EmailNotInRunError, InvalidWorkspacePathError } from '../domain/agent-tool.errors.js';
-import { convertAttachment } from '../files/attachment-converter.js';
-import { derivedPath, emailIdFromPath } from '../files/inbox-paths.js';
+import { emailIdFromPath } from '../files/inbox-paths.js';
 import { InboxWorkspaceService } from '../files/inbox-workspace.service.js';
 import { asToolResult, emitEvent, resolveRunScope, type RunScope } from './run-scope.js';
 import {
-  convertAttachmentSchema,
   recordTriageSchema,
   saveInvoiceProductsSchema,
   saveInvoiceSchema,
@@ -31,7 +29,7 @@ export class AgentToolsFactory {
   }
 
   extractorTools() {
-    return [this.convertAttachment(), this.saveInvoice(), this.saveInvoiceProducts(), this.storeInvoiceDocument()];
+    return [this.saveInvoice(), this.saveInvoiceProducts(), this.storeInvoiceDocument()];
   }
 
   private recordTriage() {
@@ -52,39 +50,6 @@ export class AgentToolsFactory {
         name: 'record_triage',
         description: 'Record whether an email likely contains an invoice. Call it once for every email you review.',
         schema: recordTriageSchema,
-      },
-    );
-  }
-
-  private convertAttachment() {
-    return tool(
-      (input, runtime: ToolRuntime) =>
-        asToolResult(async () => {
-          const scope = resolveRunScope(runtime);
-          const emailId = this.attachmentEmailId(input.path);
-          const file = await this.workspace.readFile(scope.userId, scope.threadId, input.path);
-          if (!file) return `Error: ${input.path} does not exist. Check the attachment list in email.md.`;
-
-          const bytes = typeof file.content === 'string' ? new TextEncoder().encode(file.content) : file.content;
-          const fileName = input.path.split('/').pop() ?? 'attachment';
-          const output = await convertAttachment(fileName, file.mimeType, bytes);
-
-          if (output.kind === 'unsupported') return `Not converted: ${output.reason}`;
-          if (output.kind === 'text') {
-            const path = derivedPath(emailId, output.fileName);
-            await this.workspace.writeFiles(scope.userId, scope.threadId, [[path, output.text]]);
-            return `Converted to text. Read it with read_file: ${path}`;
-          }
-          const files = output.files.map((page) => [derivedPath(emailId, page.fileName), page.content] as [string, Uint8Array]);
-          await this.workspace.writeFiles(scope.userId, scope.threadId, files);
-          return `This PDF is scanned. Read the page images with read_file:\n${files.map(([path]) => `- ${path}`).join('\n')}`;
-        }),
-      {
-        name: 'convert_attachment',
-        description:
-          'Convert a PDF, XML or HTML attachment into files you can read. Writes them under /inbox/{emailId}/derived/ ' +
-          'and returns their paths (never the content).',
-        schema: convertAttachmentSchema,
       },
     );
   }
@@ -134,7 +99,7 @@ export class AgentToolsFactory {
         asToolResult(async () => {
           const scope = resolveRunScope(runtime);
           if (!input.path.includes('/attachments/')) {
-            return 'Error: pass the ORIGINAL attachment path (…/attachments/…), not a derived file.';
+            return 'Error: pass an attachment path (/inbox/{emailId}/attachments/…).';
           }
           this.attachmentEmailId(input.path);
           const file = await this.workspace.readFile(scope.userId, scope.threadId, input.path);

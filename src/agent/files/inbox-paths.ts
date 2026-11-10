@@ -3,8 +3,7 @@
  * `/inbox/` prefix is routed by CompositeBackend to a StoreBackend namespaced per user and thread.
  *
  *   /inbox/{emailId}/email.md                  headers, attachment manifest, plain-text body
- *   /inbox/{emailId}/attachments/{fileName}    original bytes
- *   /inbox/{emailId}/derived/{fileName}...     text / page images produced by convert_attachment
+ *   /inbox/{emailId}/attachments/{fileName}    original bytes (PDFs and images are read natively by the model)
  */
 export const INBOX_ROUTE = '/inbox/';
 export const USERS_NAMESPACE_ROOT = 'finsift-users';
@@ -31,10 +30,6 @@ export function emailMarkdownPath(emailId: string): string {
 
 export function attachmentPath(emailId: string, fileName: string): string {
   return `${INBOX_ROUTE}${emailId}/attachments/${fileName}`;
-}
-
-export function derivedPath(emailId: string, fileName: string): string {
-  return `${INBOX_ROUTE}${emailId}/derived/${fileName}`;
 }
 
 /** Extracts the email id from any `/inbox/{emailId}/...` path. */

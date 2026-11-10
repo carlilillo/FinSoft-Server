@@ -6,17 +6,15 @@ import { z } from 'zod';
 import { AppConfigService } from '../config/app-config.service.js';
 import { AgentPersistenceService } from './agent-persistence.service.js';
 import { INBOX_ROUTE, inboxNamespace } from './files/inbox-paths.js';
+import { nativeFileResultsMiddleware } from './middleware/native-file-results.middleware.js';
 import { EXTRACTOR_AGENT_NAME, EXTRACTOR_DESCRIPTION, EXTRACTOR_SYSTEM_PROMPT } from './prompts/extractor.prompt.js';
 import { TRIAGE_AGENT_NAME, TRIAGE_SYSTEM_PROMPT } from './prompts/triage.prompt.js';
 import { AgentToolsFactory } from './tools/agent-tools.factory.js';
 
 export const agentContextSchema = z.object({ userId: z.string() });
 
-/** PDFs, XML and HTML must go through convert_attachment; the inbox is read-only for the model. */
-const WORKSPACE_PERMISSIONS = [
-  { operations: ['read' as const], paths: ['/inbox/**/attachments/*.{pdf,xml,html}'], mode: 'deny' as const },
-  { operations: ['write' as const], paths: ['/inbox/**'], mode: 'deny' as const },
-];
+/** The inbox holds the user's original emails and attachments: the model reads them but never changes them. */
+const WORKSPACE_PERMISSIONS = [{ operations: ['write' as const], paths: ['/inbox/**'], mode: 'deny' as const }];
 
 @Injectable()
 export class InvoiceAgentFactory {
@@ -32,8 +30,8 @@ export class InvoiceAgentFactory {
       description: EXTRACTOR_DESCRIPTION,
       systemPrompt: EXTRACTOR_SYSTEM_PROMPT,
       tools: this.tools.extractorTools(),
-      middleware: [todoListMiddleware()],
-      permissions: [{ operations: ['read'], paths: ['/inbox/**/attachments/*.{pdf,xml,html}'], mode: 'deny' }],
+      middleware: [todoListMiddleware(), nativeFileResultsMiddleware()],
+      permissions: WORKSPACE_PERMISSIONS,
     };
 
     return createDeepAgent({
@@ -42,7 +40,7 @@ export class InvoiceAgentFactory {
       systemPrompt: TRIAGE_SYSTEM_PROMPT,
       tools: this.tools.triageTools(),
       subagents: [extractor],
-      middleware: [todoListMiddleware()],
+      middleware: [todoListMiddleware(), nativeFileResultsMiddleware()],
       contextSchema: agentContextSchema,
       checkpointer: this.persistence.checkpointer,
       store: this.persistence.store,

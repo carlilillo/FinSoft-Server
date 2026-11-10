@@ -61,16 +61,17 @@ All amounts are stored as integer **cents** (`bigint`). The agent reports decima
 invoice-triage (main deep agent, todo middleware)
   ├─ reads /inbox/{emailId}/email.md (body text only) → record_triage
   └─ task → invoice-extractor (subagent, todo middleware)
-        convert_attachment → read_file → save_invoice → save_invoice_products → store_invoice_document
+        read_file → save_invoice → save_invoice_products → store_invoice_document
 ```
 
 - **Files, not prompts.** Ingestion writes each email body and its original attachments into the agent's
   filesystem under `/inbox/`, which `CompositeBackend` routes to a `StoreBackend` on **PostgresStore**,
   namespaced per user *and* thread (no cross-thread memory). The invocation message only lists paths.
-  Tools that produce content (`convert_attachment`) write files and return paths.
-- PDFs/XML/HTML are converted to text files (scanned PDFs to page images) because OpenAI can't take PDFs
-  inside tool results; the model is blocked from opening them directly by filesystem permissions.
-  `BinarySafeStore` base64-wraps binary files so they survive Postgres `jsonb`.
+- **Plain PDFs.** Attachments are stored as-is and the subagent opens them with `read_file`: PDFs and images
+  come back as file/image content blocks, XML and HTML as text. `NativeFileResultsMiddleware` hands PDF tool
+  results to OpenAI as native `input_file` items (LangChain only does that for images), so use a model that
+  reads PDFs. The model can read `/inbox/` but never write to it. `BinarySafeStore` base64-wraps binary files
+  so they survive Postgres `jsonb`.
 - **Checkpointer:** `PostgresSaver` (schema `langgraph`). The thread id is the analysis run id, which tools read
   from the runtime and stamp on every invoice (`invoices.run_id`). Re-running with the user's corrected email
   selection invokes the same thread, so the agent keeps its context.

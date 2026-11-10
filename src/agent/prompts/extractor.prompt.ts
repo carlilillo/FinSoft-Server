@@ -12,10 +12,8 @@ probably contains an invoice or receipt, in English or Spanish. Extract it preci
 
 ## Reading the documents
 - Start with /inbox/{emailId}/email.md for context (sender, subject, body).
-- PDF, XML and HTML attachments cannot be opened directly. Call convert_attachment with the attachment path; it
-  writes readable files under /inbox/{emailId}/derived/ and returns their paths. Then read those paths with read_file.
-  Scanned PDFs come back as page images (.png) — read them with read_file and transcribe what you see.
-- Image attachments (.png, .jpg, .webp) can be read directly with read_file.
+- Open every attachment directly with read_file: PDFs (including scanned ones) and images (.png, .jpg, .webp)
+  come back as the document itself, XML (Facturae, UBL) and HTML as text.
 - If there is no attachment, the invoice/receipt may be in the email body itself.
 - Ignore attachments that are not invoices (terms and conditions, brochures, logos).
 
@@ -28,8 +26,8 @@ probably contains an invoice or receipt, in English or Spanish. Extract it preci
    (or null), discount (or null), line net, line VAT (or null), line gross, SKU/reference (or null) and unit (or null).
    Include shipping, fees and surcharges as their own lines. If a global discount exists, add it as a line with a
    negative net amount. Describe products the way the document does, in its original language.
-3. store_invoice_document — once per source file the invoice came from (the ORIGINAL attachment path, not the
-   derived file). Skip this step when the invoice came from the email body.
+3. store_invoice_document — once per attachment the invoice came from, with its /inbox/{emailId}/attachments/ path.
+   Skip this step when the invoice came from the email body.
 
 When a tool returns an error, read it carefully, re-check the document and call the tool again with corrected
 values (at most two retries per tool). Never invent values: use null for anything that is not on the document.

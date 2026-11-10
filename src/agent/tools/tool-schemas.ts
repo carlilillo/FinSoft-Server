@@ -13,10 +13,6 @@ export const recordTriageSchema = z.object({
   language: z.enum(['en', 'es', 'other']).describe('Language of the email'),
 });
 
-export const convertAttachmentSchema = z.object({
-  path: z.string().describe('Original attachment path, e.g. /inbox/{emailId}/attachments/invoice.pdf'),
-});
-
 export const saveInvoiceSchema = z.object({
   emailId: ulid.describe('The email the invoice came from'),
   vendor: z.object({
@@ -64,5 +60,5 @@ export const saveInvoiceProductsSchema = z.object({
 
 export const storeInvoiceDocumentSchema = z.object({
   invoiceId: ulid.describe('Returned by save_invoice'),
-  path: z.string().describe('ORIGINAL attachment path, e.g. /inbox/{emailId}/attachments/factura.pdf'),
+  path: z.string().describe('Attachment path, e.g. /inbox/{emailId}/attachments/factura.pdf'),
 });
