@@ -5,6 +5,7 @@ import { DomainError } from '../domain/domain-error.js';
 /** The only place that knows how domain error codes map to HTTP status codes. */
 const DOMAIN_ERROR_STATUS: Record<string, HttpStatus> = {
   RUN_LIMIT_REACHED: HttpStatus.CONFLICT,
+  GMAIL_RUN_ALREADY_ACTIVE: HttpStatus.CONFLICT,
   RUN_NOT_CONTINUABLE: HttpStatus.CONFLICT,
   IMPORT_NOT_CONTINUABLE: HttpStatus.CONFLICT,
   RUN_STILL_ACTIVE: HttpStatus.CONFLICT,

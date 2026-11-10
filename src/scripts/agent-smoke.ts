@@ -30,7 +30,7 @@ async function main(): Promise<void> {
   try {
     await app.get(UsersService).ensureUser(userId);
     const runs = app.get(AnalysisRunsRepository);
-    const run = AnalysisRun.start({ id: runId, userId, activeRunCount: 0 });
+    const run = AnalysisRun.start({ id: runId, userId, active: { total: 0, gmail: 0 } });
     run.beginIngestion();
     await runs.save(run.toState());
 

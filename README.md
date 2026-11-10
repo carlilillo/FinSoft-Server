@@ -77,6 +77,8 @@ document-extractor (imported PDFs: one thread per document, no triage, no subage
 - **At most 3 analyses in progress per user** (`MAX_ACTIVE_RUNS`, Gmail and imports together). Run creation
   takes a per-user Postgres advisory lock so concurrent requests can't exceed it (`RUN_LIMIT_REACHED`, 409),
   and the worker handles `ANALYSIS_WORKER_CONCURRENCY` (default 3) jobs at the same time.
+- **One Gmail extraction at a time per user** (business rule, not configurable): starting or re-running a Gmail
+  analysis while another one is in progress fails with `GMAIL_RUN_ALREADY_ACTIVE` (409). Imports are unaffected.
 
 - **Files, not prompts.** Ingestion writes each email body and its original attachments into the agent's
   filesystem under `/inbox/`, which `CompositeBackend` routes to a `StoreBackend` on **PostgresStore**,

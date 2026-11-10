@@ -1,4 +1,9 @@
-import { ImportRunNotContinuableError, RunLimitReachedError, RunNotContinuableError } from './analysis-run.errors.js';
+import {
+  GmailRunAlreadyActiveError,
+  ImportRunNotContinuableError,
+  RunLimitReachedError,
+  RunNotContinuableError,
+} from './analysis-run.errors.js';
 
 export type RunStatus = 'pending' | 'ingesting' | 'extracting' | 'awaiting_review' | 'failed';
 
@@ -28,8 +33,20 @@ export function isRunActive(status: RunStatus): boolean {
   return ACTIVE_STATUSES.has(status);
 }
 
-export function assertCanStartRun(activeRunCount: number): void {
-  if (activeRunCount >= MAX_ACTIVE_RUNS) throw new RunLimitReachedError(MAX_ACTIVE_RUNS);
+/** The user's analyses in progress right now, in total and those reading their Gmail inbox. */
+export interface ActiveRuns {
+  total: number;
+  gmail: number;
+}
+
+export function assertCanStartRun(active: ActiveRuns): void {
+  if (active.total >= MAX_ACTIVE_RUNS) throw new RunLimitReachedError(MAX_ACTIVE_RUNS);
+}
+
+/** Business rule: two extractions of the same inbox never run at the same time. */
+export function assertCanStartGmailRun(active: ActiveRuns): void {
+  if (active.gmail > 0) throw new GmailRunAlreadyActiveError();
+  assertCanStartRun(active);
 }
 
 /** Lifecycle of one analysis session. Gmail sessions are one LangGraph thread; imports run one thread per document. */
@@ -40,8 +57,8 @@ export class AnalysisRun {
     return new AnalysisRun({ ...state });
   }
 
-  static start(props: { id: string; userId: string; activeRunCount: number }): AnalysisRun {
-    assertCanStartRun(props.activeRunCount);
+  static start(props: { id: string; userId: string; active: ActiveRuns }): AnalysisRun {
+    assertCanStartGmailRun(props.active);
     return new AnalysisRun({
       id: props.id,
       userId: props.userId,
@@ -57,8 +74,8 @@ export class AnalysisRun {
   }
 
   /** A session fed by PDFs the user imported: no inbox, every document goes straight to extraction. */
-  static startImport(props: { id: string; userId: string; activeRunCount: number; documentsTotal: number }): AnalysisRun {
-    assertCanStartRun(props.activeRunCount);
+  static startImport(props: { id: string; userId: string; active: ActiveRuns; documentsTotal: number }): AnalysisRun {
+    assertCanStartRun(props.active);
     return new AnalysisRun({
       id: props.id,
       userId: props.userId,
@@ -107,10 +124,10 @@ export class AnalysisRun {
   }
 
   /** The user asked to re-run the same thread with a corrected email selection. */
-  requestContinuation(activeRunCount: number): void {
+  requestContinuation(active: ActiveRuns): void {
     if (this.state.source === 'upload') throw new ImportRunNotContinuableError();
     if (isRunActive(this.state.status)) throw new RunNotContinuableError(this.state.id, this.state.status);
-    assertCanStartRun(activeRunCount);
+    assertCanStartGmailRun(active);
     this.state = {
       ...this.state,
       status: 'pending',

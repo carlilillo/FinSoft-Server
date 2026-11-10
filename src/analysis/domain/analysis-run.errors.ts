@@ -8,6 +8,13 @@ export class RunLimitReachedError extends DomainError {
   }
 }
 
+export class GmailRunAlreadyActiveError extends DomainError {
+  readonly code = 'GMAIL_RUN_ALREADY_ACTIVE';
+  constructor() {
+    super('Your inbox is already being analyzed. Wait for that analysis to finish before starting another one.');
+  }
+}
+
 export class RunNotContinuableError extends DomainError {
   readonly code = 'RUN_NOT_CONTINUABLE';
   constructor(runId: string, status: RunStatus) {

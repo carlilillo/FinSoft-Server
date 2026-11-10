@@ -42,8 +42,8 @@ export class AnalysisService {
   async start(userId: string): Promise<{ runId: string }> {
     if (!(await this.gmail.isConnected(userId))) throw new GmailNotConnectedError();
     const runId = newId();
-    await this.runs.saveExclusive(userId, (activeRunCount) =>
-      AnalysisRun.start({ id: runId, userId, activeRunCount }).toState(),
+    await this.runs.saveExclusive(userId, (active) =>
+      AnalysisRun.start({ id: runId, userId, active }).toState(),
     );
     await this.jobs.enqueue<AnalysisJob>(ANALYSIS_QUEUE, { kind: 'start', userId, runId });
     return { runId };
@@ -62,8 +62,8 @@ export class AnalysisService {
   async importDocuments(userId: string, files: IncomingFile[]): Promise<{ runId: string }> {
     assertImportable(files);
     const runId = newId();
-    const run = await this.runs.saveExclusive(userId, (activeRunCount) =>
-      AnalysisRun.startImport({ id: runId, userId, activeRunCount, documentsTotal: files.length }).toState(),
+    const run = await this.runs.saveExclusive(userId, (active) =>
+      AnalysisRun.startImport({ id: runId, userId, active, documentsTotal: files.length }).toState(),
     );
 
     try {
@@ -99,9 +99,9 @@ export class AnalysisService {
     const emails = await this.emails.findForRun(userId, runId);
     const plan = planContinuation(emails, dto.emailIds);
 
-    await this.runs.saveExclusive(userId, (activeRunCount) => {
+    await this.runs.saveExclusive(userId, (active) => {
       const run = AnalysisRun.from(entity);
-      run.requestContinuation(activeRunCount);
+      run.requestContinuation(active);
       return run.toState();
     });
     await this.emails.markMany(plan.toExtract, 'user_selected');
