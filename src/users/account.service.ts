@@ -5,6 +5,7 @@ import { AnalysisRunsRepository } from '../analysis/analysis-runs.repository.js'
 import { RunStillActiveError } from '../analysis/domain/analysis-run.errors.js';
 import { isRunActive } from '../analysis/domain/analysis-run.js';
 import { ImportFilesRepository } from '../imports/import-files.repository.js';
+import { AnalysisSchedulesService } from '../schedules/analysis-schedules.service.js';
 import { StorageService } from '../storage/storage.service.js';
 import { CLERK_CLIENT } from './clerk.provider.js';
 import { UsersService } from './users.service.js';
@@ -18,6 +19,7 @@ export class AccountService {
     private readonly usersService: UsersService,
     private readonly runs: AnalysisRunsRepository,
     private readonly importFiles: ImportFilesRepository,
+    private readonly schedules: AnalysisSchedulesService,
     private readonly agentPersistence: AgentPersistenceService,
     private readonly storage: StorageService,
     @Inject(CLERK_CLIENT) private readonly clerk: ClerkClient,
@@ -29,6 +31,7 @@ export class AccountService {
 
     // Gmail runs are one thread each; every imported document had its own thread.
     const importThreads = await this.importFiles.findIdsForUser(userId);
+    await this.schedules.remove(userId);
     await this.agentPersistence.purgeThreads(userId, [...userRuns.map((run) => run.id), ...importThreads]);
     await this.usersService.deleteByClerkId(userId);
     await this.storage.deletePrefix(`users/${userId}/`);

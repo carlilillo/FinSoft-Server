@@ -28,6 +28,6 @@ import { GmailCallbackController } from './gmail-callback.controller.js';
   ],
   controllers: [AnalysisController, GmailCallbackController],
   providers: [AnalysisService, AnalysisRunsRepository, AnalysisIngestionService, AnalysisProcessor],
-  exports: [AnalysisRunsRepository],
+  exports: [AnalysisRunsRepository, AnalysisService],
 })
 export class AnalysisModule {}
