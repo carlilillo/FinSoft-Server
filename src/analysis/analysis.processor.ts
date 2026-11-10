@@ -3,6 +3,7 @@ import { AgentPersistenceService } from '../agent/agent-persistence.service.js';
 import { AgentRunnerService } from '../agent/agent-runner.service.js';
 import { AgentWorkspaceService } from '../agent/files/workspace.service.js';
 import { AppConfigService } from '../config/app-config.service.js';
+import { DomainError } from '../common/domain/domain-error.js';
 import { DocumentsService } from '../documents/documents.service.js';
 import { IMPORT_MIME_TYPE, resolveImportOutcome } from '../imports/domain/import-file.js';
 import type { ImportFileEntity } from '../imports/entities/import-file.entity.js';
@@ -76,7 +77,7 @@ export class AnalysisProcessor implements OnApplicationBootstrap {
         throw error;
       }
       if (job.kind === 'import') await this.importFiles.failPending(job.runId, 'The extraction stopped before reaching this document.');
-      run.fail(userFacingError(message), new Date());
+      run.fail(userFacingError(error), new Date());
       await this.runs.save(run.toState());
     }
   }
@@ -152,8 +153,13 @@ export class AnalysisProcessor implements OnApplicationBootstrap {
   }
 }
 
-function userFacingError(message: string): string {
-  if (/invalid_grant|GMAIL_NOT_CONNECTED/i.test(message)) {
+const GMAIL_ACCESS_CODES = new Set(['GMAIL_ACCESS_REVOKED', 'GMAIL_NOT_CONNECTED']);
+
+function userFacingError(error: unknown): string {
+  // These already say which account to reconnect, in words meant for the user.
+  if (error instanceof DomainError && GMAIL_ACCESS_CODES.has(error.code)) return error.message;
+  const message = (error as Error).message;
+  if (/invalid_grant/i.test(message)) {
     return 'Gmail access expired or was revoked. Reconnect Gmail and run the analysis again.';
   }
   if (/rate limit|429/i.test(message)) return 'The AI service is busy right now. Try the analysis again in a few minutes.';

@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import type { Page } from '../common/dto/pagination.dto.js';
 import { InvoiceDocumentEntity } from '../documents/entities/invoice-document.entity.js';
+import { GmailService } from '../gmail/gmail.service.js';
 import {
   toDocumentView,
   toInvoiceLineView,
@@ -18,6 +19,7 @@ export type InvoiceSummaryView = ReturnType<typeof toInvoiceSummaryView>;
 export class InvoicesService {
   constructor(
     private readonly invoices: InvoicesRepository,
+    private readonly gmail: GmailService,
     @InjectRepository(InvoiceDocumentEntity) private readonly documents: Repository<InvoiceDocumentEntity>,
   ) {}
 
@@ -29,15 +31,17 @@ export class InvoicesService {
   async detail(userId: string, id: string) {
     const invoice = await this.invoices.findDetail(userId, id);
     if (!invoice?.vendor) throw new NotFoundException(`Invoice ${id} not found`);
-    const documents = await this.documents.find({
-      where: { invoiceId: id, userId },
-      order: { createdAt: 'ASC' },
-    });
+    const [documents, accounts] = await Promise.all([
+      this.documents.find({ where: { invoiceId: id, userId }, order: { createdAt: 'ASC' } }),
+      invoice.gmailConnectionId ? this.gmail.accountAddresses(userId) : new Map<string, string>(),
+    ]);
     return {
       ...toInvoiceSummaryView(invoice),
       paymentMethod: invoice.paymentMethod,
       notes: invoice.notes,
       emailId: invoice.emailId,
+      /** The connected Gmail account the invoice's email arrived in; null for imported invoices. */
+      gmailAccount: (invoice.gmailConnectionId && accounts.get(invoice.gmailConnectionId)) || null,
       createdAt: invoice.createdAt,
       vendor: toVendorView(invoice.vendor),
       lines: (invoice.lines ?? []).map(toInvoiceLineView),

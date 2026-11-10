@@ -21,6 +21,10 @@ export class InvoiceEntity {
   @Column({ ...ULID_COLUMN, name: 'email_id', nullable: true })
   emailId: string | null;
 
+  /** Gmail account the invoice's email arrived in; null for imported invoices. */
+  @Column({ ...ULID_COLUMN, name: 'gmail_connection_id', nullable: true })
+  gmailConnectionId: string | null;
+
   /** Imported PDF the invoice was read from (manual imports have no email). */
   @Column({ ...ULID_COLUMN, name: 'import_file_id', nullable: true })
   importFileId: string | null;

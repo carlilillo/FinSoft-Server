@@ -15,17 +15,36 @@ export class GmailNotConnectedError extends DomainError {
   }
 }
 
+export class GmailAccountUnknownError extends DomainError {
+  readonly code = 'GMAIL_ACCOUNT_UNKNOWN';
+  constructor() {
+    super('Google did not say which account was connected. Start the connection again.');
+  }
+}
+
+export class GmailAccessRevokedError extends DomainError {
+  readonly code = 'GMAIL_ACCESS_REVOKED';
+  constructor(googleEmail: string) {
+    super(`Gmail access for ${googleEmail} expired or was revoked. Reconnect it (or disconnect it) in Settings and run the analysis again.`);
+  }
+}
+
+/** What the user was doing when they went to Google: starting an analysis, or only linking an account. */
+export const OAUTH_INTENTS = ['analyze', 'connect'] as const;
+export type OAuthIntent = (typeof OAUTH_INTENTS)[number];
+
 export interface OAuthStatePayload {
   userId: string;
+  intent: OAuthIntent;
   nonce: string;
   exp: number;
 }
 
 const STATE_TTL_MS = 10 * 60 * 1000;
 
-/** Signed, short-lived OAuth `state`: binds the Google callback to the Clerk user who started it. */
-export function signOAuthState(userId: string, secret: string, now: Date): string {
-  const payload: OAuthStatePayload = { userId, nonce: randomBytes(12).toString('hex'), exp: now.getTime() + STATE_TTL_MS };
+/** Signed, short-lived OAuth `state`: binds the Google callback to the Clerk user who started it and to why. */
+export function signOAuthState(userId: string, intent: OAuthIntent, secret: string, now: Date): string {
+  const payload: OAuthStatePayload = { userId, intent, nonce: randomBytes(12).toString('hex'), exp: now.getTime() + STATE_TTL_MS };
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
   return `${body}.${sign(body, secret)}`;
 }
@@ -42,7 +61,7 @@ export function verifyOAuthState(state: string, secret: string, now: Date): OAut
 
   const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as OAuthStatePayload;
   if (payload.exp < now.getTime()) throw new InvalidOAuthStateError('expired');
-  return payload;
+  return { ...payload, intent: payload.intent === 'connect' ? 'connect' : 'analyze' };
 }
 
 function sign(body: string, secret: string): string {

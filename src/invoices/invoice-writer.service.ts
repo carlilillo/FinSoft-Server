@@ -15,6 +15,8 @@ export interface InvoiceProvenance {
   userId: string;
   runId: string | null;
   emailId: string | null;
+  /** The Gmail account that email arrived in; null when the invoice did not come from an inbox. */
+  gmailConnectionId: string | null;
   /** The imported PDF the invoice was read from, when it did not come from an email. */
   importFileId: string | null;
 }
@@ -54,6 +56,7 @@ export class InvoiceWriterService {
         vendorId: vendor.id,
         runId: provenance.runId ?? existing?.runId ?? null,
         emailId: provenance.emailId ?? existing?.emailId ?? null,
+        gmailConnectionId: provenance.gmailConnectionId ?? existing?.gmailConnectionId ?? null,
         importFileId: provenance.importFileId ?? existing?.importFileId ?? null,
       });
       await manager.save(InvoiceEntity, invoice);

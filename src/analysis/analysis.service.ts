@@ -49,9 +49,13 @@ export class AnalysisService {
     return { runId };
   }
 
-  /** Google redirected back: store the Gmail grant, then start the analysis the user asked for. */
-  async startAfterConsent(code: string, state: string): Promise<{ runId: string }> {
-    const userId = await this.gmail.completeConsent(code, state);
+  /**
+   * Google redirected back: store the Gmail grant, then start the analysis when that is what the user
+   * went to Google for. Linking an account from Settings starts nothing (`runId` is null).
+   */
+  async completeConsent(code: string, state: string): Promise<{ runId: string | null }> {
+    const { userId, intent } = await this.gmail.completeConsent(code, state);
+    if (intent === 'connect') return { runId: null };
     return this.start(userId);
   }
 
@@ -126,8 +130,9 @@ export class AnalysisService {
 
   async get(userId: string, runId: string) {
     const run = await this.findOwnedOrThrow(userId, runId);
-    const [emails, documents, invoices] = await Promise.all([
+    const [emails, accounts, documents, invoices] = await Promise.all([
       run.source === 'gmail' ? this.emails.findForRun(userId, runId) : Promise.resolve([]),
+      run.source === 'gmail' ? this.gmail.accountAddresses(userId) : Promise.resolve(new Map<string, string>()),
       run.source === 'upload' ? this.importFiles.findForRun(userId, runId) : Promise.resolve([]),
       this.invoices.findForRun(userId, runId),
     ]);
@@ -158,7 +163,7 @@ export class AnalysisService {
         totals: summarizeSession(invoices),
         invoices: invoices.map(toInvoiceSummaryView),
         products,
-        emails: emails.map((email) => toEvaluatedEmailView(email, invoices)),
+        emails: emails.map((email) => toEvaluatedEmailView(email, invoices, accounts)),
         documents: documents.map((document) => toImportedDocumentView(document, invoices)),
       },
     };
@@ -171,9 +176,11 @@ export class AnalysisService {
   }
 }
 
-function toEvaluatedEmailView(email: EmailEntity, invoices: InvoiceEntity[]) {
+function toEvaluatedEmailView(email: EmailEntity, invoices: InvoiceEntity[], accounts: Map<string, string>) {
   return {
     id: email.id,
+    /** The connected Gmail account whose inbox the email was found in. */
+    gmailAccount: (email.gmailConnectionId && accounts.get(email.gmailConnectionId)) || null,
     subject: email.subject,
     senderName: email.senderName,
     senderEmail: email.senderEmail,

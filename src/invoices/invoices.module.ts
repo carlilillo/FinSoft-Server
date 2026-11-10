@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { InvoiceDocumentEntity } from '../documents/entities/invoice-document.entity.js';
+import { GmailModule } from '../gmail/gmail.module.js';
 import { InvoiceLineEntity } from './entities/invoice-line.entity.js';
 import { InvoiceEntity } from './entities/invoice.entity.js';
 import { VendorEntity } from './entities/vendor.entity.js';
@@ -10,7 +11,7 @@ import { InvoicesRepository } from './invoices.repository.js';
 import { InvoicesService } from './invoices.service.js';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([InvoiceEntity, InvoiceLineEntity, VendorEntity, InvoiceDocumentEntity])],
+  imports: [TypeOrmModule.forFeature([InvoiceEntity, InvoiceLineEntity, VendorEntity, InvoiceDocumentEntity]), GmailModule],
   controllers: [InvoicesController],
   providers: [InvoicesService, InvoicesRepository, InvoiceWriterService],
   exports: [InvoicesRepository, InvoiceWriterService],

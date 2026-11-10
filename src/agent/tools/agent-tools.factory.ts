@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { tool, type ToolRuntime } from 'langchain';
 import { DocumentsService } from '../../documents/documents.service.js';
 import { EmailsRepository } from '../../emails/emails.repository.js';
+import type { EmailEntity } from '../../emails/entities/email.entity.js';
 import { InvoiceWriterService } from '../../invoices/invoice-writer.service.js';
 import { EmailNotInRunError, InvalidWorkspacePathError } from '../domain/agent-tool.errors.js';
 import { emailIdFromPath } from '../files/workspace-paths.js';
@@ -65,10 +66,16 @@ export class AgentToolsFactory {
       (input, runtime: ToolRuntime) =>
         asToolResult(async () => {
           const scope = resolveRunScope(runtime);
-          await this.assertEmailInRun(scope, input.emailId);
+          const email = await this.assertEmailInRun(scope, input.emailId);
           const { emailId, ...invoice } = input;
           const saved = await this.writer.saveInvoice(
-            { userId: scope.userId, runId: scope.threadId, emailId, importFileId: null },
+            {
+              userId: scope.userId,
+              runId: scope.threadId,
+              emailId,
+              gmailConnectionId: email.gmailConnectionId,
+              importFileId: null,
+            },
             invoice,
           );
           emitEvent(runtime, { event: 'invoice.saved', invoiceId: saved.invoiceId, created: saved.created });
@@ -90,7 +97,7 @@ export class AgentToolsFactory {
         asToolResult(async () => {
           const scope = resolveImportScope(runtime);
           const saved = await this.writer.saveInvoice(
-            { userId: scope.userId, runId: scope.runId, emailId: null, importFileId: scope.importFileId },
+            { userId: scope.userId, runId: scope.runId, emailId: null, gmailConnectionId: null, importFileId: scope.importFileId },
             input,
           );
           emitEvent(runtime, { event: 'invoice.saved', invoiceId: saved.invoiceId, created: saved.created });
@@ -163,8 +170,9 @@ export class AgentToolsFactory {
     return emailId;
   }
 
-  private async assertEmailInRun(scope: RunScope, emailId: string): Promise<void> {
+  private async assertEmailInRun(scope: RunScope, emailId: string): Promise<EmailEntity> {
     const email = await this.emails.findOneForRun(scope.userId, scope.threadId, emailId);
     if (!email) throw new EmailNotInRunError(emailId);
+    return email;
   }
 }

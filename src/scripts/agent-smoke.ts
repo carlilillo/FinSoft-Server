@@ -36,7 +36,7 @@ async function main(): Promise<void> {
 
     const emails = await app
       .get(AnalysisIngestionService)
-      .ingestRaw(userId, runId, buildFixtureEmails().map((fixture) => ({ gmailMessageId: fixture.id, raw: fixture.raw })));
+      .ingestRaw(userId, runId, buildFixtureEmails().map((fixture) => ({ gmailConnectionId: null, gmailMessageId: fixture.id, raw: fixture.raw })));
     run.beginExtraction(emails.length);
     await runs.save(run.toState());
 

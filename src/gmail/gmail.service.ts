@@ -1,9 +1,17 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { google, type gmail_v1 } from 'googleapis';
 import { TokenCipherService } from '../common/crypto/token-cipher.service.js';
 import { AppConfigService } from '../config/app-config.service.js';
 import { newId } from '../database/ids.js';
-import { GmailNotConnectedError, signOAuthState, verifyOAuthState } from './domain/oauth-state.js';
+import {
+  GmailAccessRevokedError,
+  GmailAccountUnknownError,
+  GmailNotConnectedError,
+  type OAuthIntent,
+  signOAuthState,
+  verifyOAuthState,
+} from './domain/oauth-state.js';
+import type { GmailConnectionEntity } from './entities/gmail-connection.entity.js';
 import { GmailConnectionsRepository } from './gmail-connections.repository.js';
 
 type OAuth2Client = InstanceType<typeof google.auth.OAuth2>;
@@ -13,14 +21,21 @@ const FETCH_CONCURRENCY = 5;
 const MAX_RETRIES = 5;
 
 export interface RawGmailMessage {
+  /** The linked account whose inbox the message was read from; null for fixtures. */
+  gmailConnectionId: string | null;
   gmailMessageId: string;
   raw: Buffer;
 }
 
-export interface GmailConnectionStatus {
-  connected: boolean;
-  googleEmail: string | null;
-  connectedAt: Date | null;
+export interface GmailConnectionView {
+  id: string;
+  googleEmail: string;
+  connectedAt: Date;
+}
+
+export interface CompletedConsent {
+  userId: string;
+  intent: OAuthIntent;
 }
 
 @Injectable()
@@ -33,73 +48,111 @@ export class GmailService {
     private readonly cipher: TokenCipherService,
   ) {}
 
-  buildConsentUrl(userId: string): string {
+  /** `select_account` lets the person pick a different Google account than the one already linked. */
+  buildConsentUrl(userId: string, intent: OAuthIntent): string {
     return this.createClient().generateAuthUrl({
       access_type: 'offline',
-      prompt: 'consent',
+      prompt: 'consent select_account',
       include_granted_scopes: true,
       scope: GMAIL_SCOPES,
-      state: signOAuthState(userId, this.config.get('OAUTH_STATE_SECRET'), new Date()),
+      state: signOAuthState(userId, intent, this.config.get('OAUTH_STATE_SECRET'), new Date()),
     });
   }
 
-  /** Validates the callback state, exchanges the code and stores the refresh token encrypted. Returns the Clerk user id. */
-  async completeConsent(code: string, state: string): Promise<string> {
-    const { userId } = verifyOAuthState(state, this.config.get('OAUTH_STATE_SECRET'), new Date());
+  /**
+   * Validates the callback state, exchanges the code and stores the account's refresh token encrypted.
+   * Linking an address the user already has refreshes that connection instead of adding a second one.
+   */
+  async completeConsent(code: string, state: string): Promise<CompletedConsent> {
+    const { userId, intent } = verifyOAuthState(state, this.config.get('OAUTH_STATE_SECRET'), new Date());
     const client = this.createClient();
     const { tokens } = await client.getToken(code);
-    const existing = await this.connections.findByUser(userId);
-    const refreshToken = tokens.refresh_token ?? (existing ? this.cipher.decrypt(existing.refreshTokenEnc) : null);
+    const googleEmail = await this.resolveEmail(client, tokens.id_token ?? null);
+    if (!googleEmail) throw new GmailAccountUnknownError();
+
+    const existing = await this.connections.findByEmail(userId, googleEmail);
+    const refreshToken =
+      tokens.refresh_token ?? (existing?.refreshTokenEnc ? this.cipher.decrypt(existing.refreshTokenEnc) : null);
     if (!refreshToken) throw new GmailNotConnectedError();
 
-    await this.connections.upsert({
+    await this.connections.save({
       id: existing?.id ?? newId(),
       userId,
-      googleEmail: await this.resolveEmail(client, tokens.id_token ?? null),
+      googleEmail,
       refreshTokenEnc: this.cipher.encrypt(refreshToken),
       scopes: tokens.scope ?? GMAIL_SCOPES.join(' '),
-      connectedAt: new Date(),
+      connectedAt: existing?.refreshTokenEnc ? existing.connectedAt : new Date(),
     });
-    this.logger.log({ userId }, 'Gmail connected');
-    return userId;
+    this.logger.log({ userId, intent }, 'Gmail account connected');
+    return { userId, intent };
   }
 
-  async getStatus(userId: string): Promise<GmailConnectionStatus> {
-    const connection = await this.connections.findByUser(userId);
-    return {
-      connected: connection !== null,
-      googleEmail: connection?.googleEmail ?? null,
-      connectedAt: connection?.connectedAt ?? null,
-    };
+  /** Why the user went to Google, read from the callback state; `analyze` when the state cannot be trusted. */
+  consentIntent(state: string | undefined): OAuthIntent {
+    if (!state) return 'analyze';
+    try {
+      return verifyOAuthState(state, this.config.get('OAUTH_STATE_SECRET'), new Date()).intent;
+    } catch {
+      return 'analyze';
+    }
+  }
+
+  async listConnections(userId: string): Promise<GmailConnectionView[]> {
+    const connections = await this.connections.findConnected(userId);
+    return connections.map(({ id, googleEmail, connectedAt }) => ({ id, googleEmail, connectedAt }));
   }
 
   async isConnected(userId: string): Promise<boolean> {
-    return (await this.connections.findByUser(userId)) !== null;
+    return (await this.connections.countConnected(userId)) > 0;
   }
 
-  async disconnect(userId: string): Promise<void> {
-    const connection = await this.connections.findByUser(userId);
-    if (!connection) return;
+  /** Address of every account the user ever linked, by connection id: the origin shown on emails and invoices. */
+  accountAddresses(userId: string): Promise<Map<string, string>> {
+    return this.connections.findAddresses(userId);
+  }
+
+  /** Revokes the account's grant at Google and forgets its token; emails and invoices keep their origin. */
+  async disconnect(userId: string, connectionId: string): Promise<void> {
+    const connection = await this.connections.findOwned(userId, connectionId);
+    if (!connection) throw new NotFoundException(`Gmail account ${connectionId} not found`);
+    if (!connection.refreshTokenEnc) return;
     try {
       await this.createClient().revokeToken(this.cipher.decrypt(connection.refreshTokenEnc));
     } catch (error) {
-      this.logger.warn({ userId, error: (error as Error).message }, 'Google token revocation failed; removing locally');
+      this.logger.warn({ userId, connectionId, error: (error as Error).message }, 'Google token revocation failed; removing locally');
     }
-    await this.connections.deleteByUser(userId);
+    await this.connections.clearToken(connection.id);
   }
 
-  /** Raw RFC 822 messages from the inbox received in the last 7 days, newest first. */
+  /**
+   * Raw RFC 822 messages received in the last 7 days in the inbox of every connected account, each
+   * tagged with its account. One account that can no longer be read fails the whole fetch, so an
+   * analysis never looks complete while an inbox was silently skipped.
+   */
   async fetchLastWeek(userId: string): Promise<RawGmailMessage[]> {
-    const gmail = await this.gmailFor(userId);
-    const ids = await this.listRecentInboxIds(gmail, this.config.get('GMAIL_MAX_MESSAGES'));
-    const messages: RawGmailMessage[] = [];
+    const connections = await this.connections.findConnected(userId);
+    if (connections.length === 0) throw new GmailNotConnectedError();
 
-    for (let index = 0; index < ids.length; index += FETCH_CONCURRENCY) {
-      const batch = ids.slice(index, index + FETCH_CONCURRENCY);
-      messages.push(...(await Promise.all(batch.map((id) => this.fetchRaw(gmail, id)))));
-    }
-    this.logger.log({ userId, count: messages.length }, 'Fetched raw Gmail messages');
+    const perAccount = await Promise.all(connections.map((connection) => this.fetchAccountLastWeek(connection)));
+    const messages = perAccount.flat();
+    this.logger.log({ userId, accounts: connections.length, count: messages.length }, 'Fetched raw Gmail messages');
     return messages;
+  }
+
+  private async fetchAccountLastWeek(connection: GmailConnectionEntity): Promise<RawGmailMessage[]> {
+    const gmail = this.gmailFor(connection);
+    try {
+      const ids = await this.listRecentInboxIds(gmail, this.config.get('GMAIL_MAX_MESSAGES'));
+      const messages: RawGmailMessage[] = [];
+      for (let index = 0; index < ids.length; index += FETCH_CONCURRENCY) {
+        const batch = ids.slice(index, index + FETCH_CONCURRENCY);
+        messages.push(...(await Promise.all(batch.map((id) => this.fetchRaw(gmail, connection.id, id)))));
+      }
+      return messages;
+    } catch (error) {
+      if (/invalid_grant/i.test((error as Error).message)) throw new GmailAccessRevokedError(connection.googleEmail);
+      throw error;
+    }
   }
 
   private async listRecentInboxIds(gmail: gmail_v1.Gmail, limit: number): Promise<string[]> {
@@ -120,14 +173,13 @@ export class GmailService {
     return ids.slice(0, limit);
   }
 
-  private async fetchRaw(gmail: gmail_v1.Gmail, id: string): Promise<RawGmailMessage> {
+  private async fetchRaw(gmail: gmail_v1.Gmail, gmailConnectionId: string, id: string): Promise<RawGmailMessage> {
     const response = await withBackoff(() => gmail.users.messages.get({ userId: 'me', id, format: 'raw' }));
-    return { gmailMessageId: id, raw: Buffer.from(response.data.raw ?? '', 'base64url') };
+    return { gmailConnectionId, gmailMessageId: id, raw: Buffer.from(response.data.raw ?? '', 'base64url') };
   }
 
-  private async gmailFor(userId: string): Promise<gmail_v1.Gmail> {
-    const connection = await this.connections.findByUser(userId);
-    if (!connection) throw new GmailNotConnectedError();
+  private gmailFor(connection: GmailConnectionEntity): gmail_v1.Gmail {
+    if (!connection.refreshTokenEnc) throw new GmailNotConnectedError();
     const client = this.createClient();
     client.setCredentials({ refresh_token: this.cipher.decrypt(connection.refreshTokenEnc) });
     return google.gmail({ version: 'v1', auth: client });
@@ -136,7 +188,7 @@ export class GmailService {
   private async resolveEmail(client: OAuth2Client, idToken: string | null): Promise<string | null> {
     if (!idToken) return null;
     const ticket = await client.verifyIdToken({ idToken, audience: this.config.get('GOOGLE_CLIENT_ID') });
-    return ticket.getPayload()?.email ?? null;
+    return ticket.getPayload()?.email?.toLowerCase() ?? null;
   }
 
   private createClient(): OAuth2Client {

@@ -9,7 +9,7 @@ import type { EmailEntity } from '../emails/entities/email.entity.js';
 import { GmailService, type RawGmailMessage } from '../gmail/gmail.service.js';
 
 /**
- * Fetches last week's inbox and lays every email out in the agent's Postgres-backed workspace:
+ * Fetches last week's inbox of every connected Gmail account and lays every email out in the agent's Postgres-backed workspace:
  * the body as markdown and each attachment as its original bytes. Nothing is put in the prompt.
  */
 @Injectable()
@@ -49,6 +49,7 @@ export class AnalysisIngestionService {
           id: emailId,
           userId,
           runId,
+          gmailConnectionId: message.gmailConnectionId,
           gmailMessageId: message.gmailMessageId,
           subject: parsed.subject?.slice(0, 998) ?? null,
           senderName: parsed.senderName?.slice(0, 320) ?? null,

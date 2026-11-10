@@ -14,6 +14,10 @@ export class EmailEntity {
   @Column({ ...ULID_COLUMN, name: 'run_id' })
   runId: string;
 
+  /** The linked Gmail account whose inbox the email was read from. */
+  @Column({ ...ULID_COLUMN, name: 'gmail_connection_id', nullable: true })
+  gmailConnectionId: string | null;
+
   @Column({ name: 'gmail_message_id', type: 'varchar', length: 64 })
   gmailMessageId: string;
 

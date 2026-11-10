@@ -39,7 +39,7 @@ src/
 ├── config/        zod-validated env
 ├── database/      TypeORM options, ULID ids, migrations
 ├── users/         ensure-user interceptor, GET/DELETE /me (full account removal)
-├── gmail/         OAuth consent URL, connection status, last-week raw (.eml) fetch with backoff
+├── gmail/         OAuth consent URL, connected accounts (several per user), last-week raw (.eml) fetch with backoff
 ├── analysis/      runs (Gmail or imported PDFs), background processor, consent callback → run page
 ├── agent/         deep agent, subagent, tools, prompts (EN/ES), Postgres persistence, run logger
 ├── emails/ imports/ invoices/ products/ documents/ insights/   feature modules
@@ -79,6 +79,11 @@ document-extractor (imported PDFs: one thread per document, no triage, no subage
   and the worker handles `ANALYSIS_WORKER_CONCURRENCY` (default 3) jobs at the same time.
 - **One Gmail extraction at a time per user** (business rule, not configurable): starting or re-running a Gmail
   analysis while another one is in progress fails with `GMAIL_RUN_ALREADY_ACTIVE` (409). Imports are unaffected.
+- **Several Gmail accounts per user.** Each linked account is a `gmail_connections` row (unique per user and
+  address) holding its own encrypted refresh token. A Gmail analysis reads the inbox of every connected account
+  into one session; `emails.gmail_connection_id` and `invoices.gmail_connection_id` record the account each one
+  came from (null for imported invoices). Disconnecting revokes and wipes the token but keeps the row, so that
+  origin stays visible. If one account can no longer be read the run fails naming it (`GMAIL_ACCESS_REVOKED`).
 
 - **Files, not prompts.** Ingestion writes each email body and its original attachments into the agent's
   filesystem under `/inbox/`, which `CompositeBackend` routes to a `StoreBackend` on **PostgresStore**,
@@ -101,9 +106,10 @@ document-extractor (imported PDFs: one thread per document, no triage, no subage
 |---|---|---|
 | GET | `/health` | public |
 | GET / DELETE | `/me` | profile / delete account (DB, agent threads, S3, Clerk) |
-| POST | `/gmail/oauth/url` | Google consent URL |
-| GET | `/gmail/oauth/callback` | public; stores the grant, starts a run, 302 → `CLIENT_URL/analyses/:id` |
-| GET / DELETE | `/gmail/connection` | status / disconnect |
+| POST | `/gmail/oauth/url` | `{ intent: 'analyze' \| 'connect' }` → Google consent URL (account picker, so more accounts can be linked) |
+| GET | `/gmail/oauth/callback` | public; stores the account's grant. `analyze`: starts a run, 302 → `CLIENT_URL/analyses/:id`. `connect`: 302 → `CLIENT_URL/settings` |
+| GET | `/gmail/connections` | the user's connected Gmail accounts |
+| DELETE | `/gmail/connections/:id` | disconnect one account (its emails and invoices keep their origin) |
 | POST / GET | `/analyses` | start (202) / history |
 | POST | `/analyses/imports` | multipart `files` (1–10 PDFs): new extraction session from imported invoices (202) |
 | GET | `/analyses/:id` | status, progress and, when finished, the session (totals, invoices, products, evaluated emails) |
