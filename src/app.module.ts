@@ -31,7 +31,7 @@ import { UsersModule } from './users/users.module.js';
         level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
         transport: process.env.NODE_ENV === 'production' ? undefined : { target: 'pino-pretty', options: { singleLine: true } },
         redact: ['req.headers.authorization', 'req.headers.cookie'],
-        autoLogging: { ignore: (request) => request.url === '/health' },
+        autoLogging: false,
       },
     }),
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
