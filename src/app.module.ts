@@ -17,6 +17,7 @@ import { ImportsModule } from './imports/imports.module.js';
 import { InsightsModule } from './insights/insights.module.js';
 import { InvoicesModule } from './invoices/invoices.module.js';
 import { JobsModule } from './jobs/jobs.module.js';
+import { PhoneUploadsModule } from './phone-uploads/phone-uploads.module.js';
 import { ProductsModule } from './products/products.module.js';
 import { SchedulesModule } from './schedules/schedules.module.js';
 import { StorageModule } from './storage/storage.module.js';
@@ -50,6 +51,7 @@ import { UsersModule } from './users/users.module.js';
     AgentModule,
     AnalysisModule,
     SchedulesModule,
+    PhoneUploadsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

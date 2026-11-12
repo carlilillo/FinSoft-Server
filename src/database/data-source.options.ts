@@ -4,6 +4,7 @@ import { InvoiceImports1762819200000 } from './migrations/1762819200000-invoice-
 import { AnalysisSchedules1762905600000 } from './migrations/1762905600000-analysis-schedules.js';
 import { GmailAccounts1762992000000 } from './migrations/1762992000000-gmail-accounts.js';
 import { ImageImports1763078400000 } from './migrations/1763078400000-image-imports.js';
+import { PhoneUploadLinks1763164800000 } from './migrations/1763164800000-phone-upload-links.js';
 import { UserEntity } from '../users/entities/user.entity.js';
 import { GmailConnectionEntity } from '../gmail/entities/gmail-connection.entity.js';
 import { AnalysisRunEntity } from '../analysis/entities/analysis-run.entity.js';
@@ -15,6 +16,7 @@ import { ProductEntity } from '../products/entities/product.entity.js';
 import { InvoiceDocumentEntity } from '../documents/entities/invoice-document.entity.js';
 import { ImportFileEntity } from '../imports/entities/import-file.entity.js';
 import { AnalysisScheduleEntity } from '../schedules/entities/analysis-schedule.entity.js';
+import { PhoneUploadLinkEntity } from '../phone-uploads/entities/phone-upload-link.entity.js';
 
 export const ENTITIES = [
   UserEntity,
@@ -28,6 +30,7 @@ export const ENTITIES = [
   ProductEntity,
   InvoiceDocumentEntity,
   AnalysisScheduleEntity,
+  PhoneUploadLinkEntity,
 ];
 
 export function buildDataSourceOptions(url: string): DataSourceOptions {
@@ -41,6 +44,7 @@ export function buildDataSourceOptions(url: string): DataSourceOptions {
       AnalysisSchedules1762905600000,
       GmailAccounts1762992000000,
       ImageImports1763078400000,
+      PhoneUploadLinks1763164800000,
     ],
     synchronize: false,
     ssl: requiresSsl(url) ? { rejectUnauthorized: false } : undefined,
