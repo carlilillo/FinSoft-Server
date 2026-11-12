@@ -6,7 +6,10 @@ import { AnalysisRunEntity } from './entities/analysis-run.entity.js';
 
 @Injectable()
 export class AnalysisRunsRepository {
-  constructor(@InjectRepository(AnalysisRunEntity) private readonly repo: Repository<AnalysisRunEntity>) {}
+  constructor(
+    @InjectRepository(AnalysisRunEntity)
+    private readonly repo: Repository<AnalysisRunEntity>,
+  ) {}
 
   save(run: Partial<AnalysisRunEntity> & { id: string }): Promise<AnalysisRunEntity> {
     return this.repo.save(this.repo.create(run));
@@ -46,6 +49,10 @@ export class AnalysisRunsRepository {
   }
 
   listForUser(userId: string, limit: number): Promise<AnalysisRunEntity[]> {
-    return this.repo.find({ where: { userId }, order: { createdAt: 'DESC' }, take: limit });
+    return this.repo.find({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+      take: limit,
+    });
   }
 }

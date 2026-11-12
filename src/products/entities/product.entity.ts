@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryColumn, type Relation } from 'typeorm';
 import { CLERK_USER_ID_COLUMN, ULID_COLUMN } from '../../database/column-types.js';
 import { VendorEntity } from '../../invoices/entities/vendor.entity.js';
 
@@ -16,7 +16,7 @@ export class ProductEntity {
 
   @ManyToOne(() => VendorEntity, { onDelete: 'NO ACTION' })
   @JoinColumn({ name: 'vendor_id' })
-  vendor?: VendorEntity;
+  vendor?: Relation<VendorEntity>;
 
   @Column({ name: 'display_name', type: 'varchar', length: 512 })
   displayName: string;

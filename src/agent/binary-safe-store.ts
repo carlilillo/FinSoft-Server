@@ -58,13 +58,19 @@ export class BinarySafeStore extends BaseStore {
 function encodeValue(value: StoreValue): StoreValue {
   const content = value.content;
   if (!(content instanceof Uint8Array)) return value;
-  return { ...value, content: { [BINARY_MARKER]: Buffer.from(content).toString('base64') } };
+  return {
+    ...value,
+    content: { [BINARY_MARKER]: Buffer.from(content).toString('base64') },
+  };
 }
 
 function decodeValue(value: StoreValue): StoreValue {
   const content = value.content as Record<string, unknown> | undefined;
   if (!content || typeof content !== 'object' || typeof content[BINARY_MARKER] !== 'string') return value;
-  return { ...value, content: new Uint8Array(Buffer.from(content[BINARY_MARKER], 'base64')) };
+  return {
+    ...value,
+    content: new Uint8Array(Buffer.from(content[BINARY_MARKER], 'base64')),
+  };
 }
 
 function decodeItem<T extends Item | null>(item: T): T {

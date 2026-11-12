@@ -1,5 +1,29 @@
 /** Rules shared by every agent that stores invoices (email extractor and imported-document extractor). */
 
+export const INVOICE_DOCUMENT_FORMATS = `
+## Invoice documents: PDFs and images
+An invoice or receipt can arrive in any of these formats, and all of them are equally the invoice itself:
+- PDF: digital or scanned, one or several pages.
+- Image: a phone photo, a scan or a screenshot, as JPEG, PNG, WebP, GIF, HEIC/HEIF (iPhone photos), AVIF, TIFF
+  (scanners and faxes, sometimes several pages) or BMP.
+- Structured or text invoices: XML (Facturae, UBL), HTML, plain text or CSV.
+read_file returns a PDF or an image as the document itself, so you see it as it is; images in formats the model
+cannot open directly (HEIC, TIFF, …) are shown as one picture per page. Never try to convert or edit a file.
+
+An image is not a lesser source: it IS the original document and the only source of truth for every value you
+store, exactly like a PDF. Read it as carefully as you would read a PDF:
+- Photos are often rotated, skewed, folded, creased, shadowed or taken at an angle, and till receipts are often
+  faded thermal paper: read them anyway, zooming in mentally on totals, dates and tax ids.
+- Store only what you can actually see. Never complete a cut-off, blurred or covered value from context; use null
+  for optional fields you cannot read.
+- Check the arithmetic (line amounts add up to the subtotal; subtotal + VAT − withholding = total). When a digit is
+  ambiguous, the arithmetic decides. If the total itself cannot be read, store nothing and say "FAILED: <reason>".
+- One image may show several receipts (store each one), or only part of one. Several images may be the pages of
+  the same invoice: store that invoice once, reading every page.
+- A picture of a product, a logo, a QR code on its own, a payment-terminal slip without the merchant's items, or a
+  screenshot of a chat or a banking app is not an invoice unless it shows the invoice's details.
+`.trim();
+
 export const SAVE_INVOICE_STEPS = `
 1. save_invoice — vendor details (null for anything not printed on the document: tax id, address, email, phone,
    website, country), invoice number (null if none, e.g. simple tickets), issue date, due date (or null), currency,

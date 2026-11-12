@@ -34,7 +34,7 @@ export class AgentToolsFactory {
     return [this.saveInvoice(), this.saveInvoiceProducts(), this.storeInvoiceDocument()];
   }
 
-  /** Imported PDFs: the server attaches the original document itself once the thread finishes. */
+  /** Imported documents (PDFs or images): the server attaches the original document itself once the thread finishes. */
   documentExtractorTools() {
     return [this.saveImportedInvoice(), this.saveInvoiceProducts()];
   }
@@ -50,7 +50,11 @@ export class AgentToolsFactory {
             triageReason: input.reason,
             language: input.language,
           });
-          emitEvent(runtime, { event: 'email.triaged', emailId: input.emailId, verdict: input.verdict });
+          emitEvent(runtime, {
+            event: 'email.triaged',
+            emailId: input.emailId,
+            verdict: input.verdict,
+          });
           return `Recorded ${input.verdict} for ${input.emailId}.`;
         }),
       {
@@ -78,7 +82,11 @@ export class AgentToolsFactory {
             },
             invoice,
           );
-          emitEvent(runtime, { event: 'invoice.saved', invoiceId: saved.invoiceId, created: saved.created });
+          emitEvent(runtime, {
+            event: 'invoice.saved',
+            invoiceId: saved.invoiceId,
+            created: saved.created,
+          });
           return saved.created
             ? `Saved invoice ${saved.invoiceId}. Now call save_invoice_products with invoiceId ${saved.invoiceId}.`
             : `Invoice already existed and was updated: ${saved.invoiceId}. Call save_invoice_products to refresh its lines.`;
@@ -97,10 +105,20 @@ export class AgentToolsFactory {
         asToolResult(async () => {
           const scope = resolveImportScope(runtime);
           const saved = await this.writer.saveInvoice(
-            { userId: scope.userId, runId: scope.runId, emailId: null, gmailConnectionId: null, importFileId: scope.importFileId },
+            {
+              userId: scope.userId,
+              runId: scope.runId,
+              emailId: null,
+              gmailConnectionId: null,
+              importFileId: scope.importFileId,
+            },
             input,
           );
-          emitEvent(runtime, { event: 'invoice.saved', invoiceId: saved.invoiceId, created: saved.created });
+          emitEvent(runtime, {
+            event: 'invoice.saved',
+            invoiceId: saved.invoiceId,
+            created: saved.created,
+          });
           return saved.created
             ? `Saved invoice ${saved.invoiceId}. Now call save_invoice_products with invoiceId ${saved.invoiceId}.`
             : `Invoice already existed and was updated: ${saved.invoiceId}. Call save_invoice_products to refresh its lines.`;
@@ -119,13 +137,21 @@ export class AgentToolsFactory {
         asToolResult(async () => {
           const scope = resolveRunScope(runtime);
           const result = await this.writer.saveLines(scope.userId, input.invoiceId, input.lines);
-          if (result.emailId) await this.emails.updateTriage(result.emailId, { triage: 'extracted' });
-          emitEvent(runtime, { event: 'invoice.lines_saved', invoiceId: input.invoiceId, lineCount: result.lineCount });
+          if (result.emailId)
+            await this.emails.updateTriage(result.emailId, {
+              triage: 'extracted',
+            });
+          emitEvent(runtime, {
+            event: 'invoice.lines_saved',
+            invoiceId: input.invoiceId,
+            lineCount: result.lineCount,
+          });
           return `Saved ${result.lineCount} lines (${result.productIds.length} products) for invoice ${input.invoiceId}.`;
         }),
       {
         name: 'save_invoice_products',
-        description: 'Store all line items of an invoice saved with save_invoice. Replaces previous lines of that invoice.',
+        description:
+          'Store all line items of an invoice saved with save_invoice. Replaces previous lines of that invoice.',
         schema: saveInvoiceProductsSchema,
       },
     );
@@ -158,7 +184,8 @@ export class AgentToolsFactory {
         }),
       {
         name: 'store_invoice_document',
-        description: 'Upload the original attachment an invoice came from to permanent storage and link it to the invoice.',
+        description:
+          'Upload the original attachment an invoice came from to permanent storage and link it to the invoice.',
         schema: storeInvoiceDocumentSchema,
       },
     );

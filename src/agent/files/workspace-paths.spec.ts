@@ -1,4 +1,11 @@
-import { areaOf, emailIdFromPath, inboxNamespace, toStoreKey, uploadPath, uploadsNamespace } from './workspace-paths.js';
+import {
+  areaOf,
+  emailIdFromPath,
+  inboxNamespace,
+  toStoreKey,
+  uploadPath,
+  uploadsNamespace,
+} from './workspace-paths.js';
 
 describe('workspace paths', () => {
   it('builds Postgres-safe namespaces from Clerk ids (no "_" allowed in labels)', () => {

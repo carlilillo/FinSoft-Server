@@ -1,4 +1,4 @@
-import { Column, Entity, JoinColumn, ManyToOne, PrimaryColumn } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, PrimaryColumn, type Relation } from 'typeorm';
 import { bigintToNumber, numericToNumber, ULID_COLUMN } from '../../database/column-types.js';
 import { ProductEntity } from '../../products/entities/product.entity.js';
 import { InvoiceEntity } from './invoice.entity.js';
@@ -13,14 +13,14 @@ export class InvoiceLineEntity {
 
   @ManyToOne(() => InvoiceEntity, (invoice) => invoice.lines, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'invoice_id' })
-  invoice?: InvoiceEntity;
+  invoice?: Relation<InvoiceEntity>;
 
   @Column({ ...ULID_COLUMN, name: 'product_id' })
   productId: string;
 
   @ManyToOne(() => ProductEntity, { onDelete: 'NO ACTION' })
   @JoinColumn({ name: 'product_id' })
-  product?: ProductEntity;
+  product?: Relation<ProductEntity>;
 
   @Column({ type: 'text' })
   description: string;

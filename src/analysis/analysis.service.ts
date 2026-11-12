@@ -42,10 +42,12 @@ export class AnalysisService {
   async start(userId: string): Promise<{ runId: string }> {
     if (!(await this.gmail.isConnected(userId))) throw new GmailNotConnectedError();
     const runId = newId();
-    await this.runs.saveExclusive(userId, (active) =>
-      AnalysisRun.start({ id: runId, userId, active }).toState(),
-    );
-    await this.jobs.enqueue<AnalysisJob>(ANALYSIS_QUEUE, { kind: 'start', userId, runId });
+    await this.runs.saveExclusive(userId, (active) => AnalysisRun.start({ id: runId, userId, active }).toState());
+    await this.jobs.enqueue<AnalysisJob>(ANALYSIS_QUEUE, {
+      kind: 'start',
+      userId,
+      runId,
+    });
     return { runId };
   }
 
@@ -60,14 +62,20 @@ export class AnalysisService {
   }
 
   /**
-   * Manual import: a new extraction session fed by the user's PDFs instead of their inbox. Each PDF is
-   * written to the workspace of its own thread; the worker then extracts them as one batch.
+   * Manual import: a new extraction session fed by the user's invoice files (PDFs or images) instead of
+   * their inbox. Each file is written, byte for byte, to the workspace of its own thread; the worker then
+   * extracts them as one batch.
    */
-  async importDocuments(userId: string, files: IncomingFile[]): Promise<{ runId: string }> {
-    assertImportable(files);
+  async importDocuments(userId: string, incoming: IncomingFile[]): Promise<{ runId: string }> {
+    const files = assertImportable(incoming);
     const runId = newId();
     const run = await this.runs.saveExclusive(userId, (active) =>
-      AnalysisRun.startImport({ id: runId, userId, active, documentsTotal: files.length }).toState(),
+      AnalysisRun.startImport({
+        id: runId,
+        userId,
+        active,
+        documentsTotal: files.length,
+      }).toState(),
     );
 
     try {
@@ -78,16 +86,27 @@ export class AnalysisService {
           userId,
           runId,
           fileName: file.fileName.slice(0, 255),
-          workspacePath: uploadPath(importFileName(file.fileName)),
+          workspacePath: uploadPath(importFileName(file.fileName, file.format)),
+          mimeType: file.format.mimeType,
           sizeBytes: file.sizeBytes,
           status: 'pending' as const,
           reason: null,
         };
-        await this.workspace.writeFiles(userId, row.id, [[row.workspacePath, file.bytes]]);
+        await this.workspace.writeFiles(userId, row.id, [
+          {
+            path: row.workspacePath,
+            content: file.bytes,
+            mimeType: row.mimeType,
+          },
+        ]);
         rows.push(row);
       }
       await this.importFiles.insertMany(rows);
-      await this.jobs.enqueue<AnalysisJob>(ANALYSIS_QUEUE, { kind: 'import', userId, runId });
+      await this.jobs.enqueue<AnalysisJob>(ANALYSIS_QUEUE, {
+        kind: 'import',
+        userId,
+        runId,
+      });
     } catch (error) {
       this.logger.error({ runId, error: (error as Error).message }, 'Could not prepare the imported documents');
       const failed = AnalysisRun.from(run);
@@ -111,7 +130,12 @@ export class AnalysisService {
     await this.emails.markMany(plan.toExtract, 'user_selected');
 
     const message = buildContinuationMessage(plan, emails, dto.note ?? null);
-    await this.jobs.enqueue<AnalysisJob>(ANALYSIS_QUEUE, { kind: 'continue', userId, runId, message });
+    await this.jobs.enqueue<AnalysisJob>(ANALYSIS_QUEUE, {
+      kind: 'continue',
+      userId,
+      runId,
+      message,
+    });
     return { runId };
   }
 
@@ -156,7 +180,10 @@ export class AnalysisService {
     };
     if (isRunActive(run.status)) return { ...base, session: null };
 
-    const products = await this.products.findForInvoiceIds(userId, invoices.map((invoice) => invoice.id));
+    const products = await this.products.findForInvoiceIds(
+      userId,
+      invoices.map((invoice) => invoice.id),
+    );
     return {
       ...base,
       session: {
@@ -196,6 +223,7 @@ function toImportedDocumentView(document: ImportFileEntity, invoices: InvoiceEnt
   return {
     id: document.id,
     fileName: document.fileName,
+    mimeType: document.mimeType,
     sizeBytes: document.sizeBytes,
     status: document.status,
     reason: document.reason,

@@ -18,7 +18,12 @@ export class AnalysisRunEntity {
   @Column({ type: 'varchar', length: 24 })
   status: RunStatus;
 
-  @Column({ name: 'stage_detail', type: 'varchar', length: 255, nullable: true })
+  @Column({
+    name: 'stage_detail',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+  })
   stageDetail: string | null;
 
   @Column({ name: 'emails_total', type: 'int', default: 0 })

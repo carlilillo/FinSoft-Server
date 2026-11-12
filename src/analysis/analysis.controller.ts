@@ -19,7 +19,7 @@ import { AnalysisService } from './analysis.service.js';
 import { ContinueAnalysisDto } from './dto/continue-analysis.dto.js';
 
 /** The part of a multer memory-storage file the import needs. */
-interface UploadedPdf {
+interface UploadedInvoiceFile {
   originalname: string;
   mimetype: string;
   size: number;
@@ -37,7 +37,7 @@ export class AnalysisController {
     return this.analysisService.start(auth.userId);
   }
 
-  /** Multipart upload (`files`, up to 10 PDFs) that starts an extraction session without Gmail. */
+  /** Multipart upload (`files`, up to 10 PDFs or images) that starts an extraction session without Gmail. */
   @Post('imports')
   @HttpCode(HttpStatus.ACCEPTED)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
@@ -47,7 +47,7 @@ export class AnalysisController {
       defParamCharset: 'utf8',
     }),
   )
-  import(@CurrentUser() auth: AuthContext, @UploadedFiles() files: UploadedPdf[] | undefined) {
+  import(@CurrentUser() auth: AuthContext, @UploadedFiles() files: UploadedInvoiceFile[] | undefined) {
     return this.analysisService.importDocuments(
       auth.userId,
       (files ?? []).map((file) => ({

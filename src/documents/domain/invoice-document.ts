@@ -1,8 +1,13 @@
-/** Where an invoice's original document came from: an email attachment or a PDF the user imported. */
+/** Where an invoice's original document came from: an email attachment or a file (PDF or image) the user imported. */
 export type DocumentSource = 'email' | 'import';
 
 /** S3 layout: everything for a user lives under users/{userId}/ so account deletion is one prefix delete. */
-export function buildDocumentKey(props: { userId: string; invoiceId: string; documentId: string; fileName: string }): string {
+export function buildDocumentKey(props: {
+  userId: string;
+  invoiceId: string;
+  documentId: string;
+  fileName: string;
+}): string {
   return `users/${props.userId}/invoices/${props.invoiceId}/${props.documentId}-${sanitizeFileName(props.fileName)}`;
 }
 

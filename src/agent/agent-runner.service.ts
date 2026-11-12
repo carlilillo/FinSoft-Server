@@ -14,7 +14,7 @@ export interface AgentInvocation {
   message: string | null;
 }
 
-/** One element of an import batch: one imported PDF on its own thread. */
+/** One element of an import batch: one imported document (PDF or image) on its own thread. */
 export interface DocumentInvocation {
   userId: string;
   /** The extraction session the document belongs to. */
@@ -52,11 +52,14 @@ export class AgentRunnerService implements OnModuleInit {
   }
 
   /**
-   * A batch of document extractions: every element extracts one imported PDF on its own thread, at
+   * A batch of document extractions: every element extracts one imported document (PDF or image) on its own thread, at
    * most `maxConcurrency` at a time. One element failing never stops the others; each result carries
    * the extractor's final answer or its error, in input order.
    */
-  extractDocuments(invocations: DocumentInvocation[], maxConcurrency: number): Promise<Array<PromiseSettledResult<string>>> {
+  extractDocuments(
+    invocations: DocumentInvocation[],
+    maxConcurrency: number,
+  ): Promise<Array<PromiseSettledResult<string>>> {
     return settleWithConcurrency(invocations, maxConcurrency, (invocation) =>
       this.execute(this.documentAgent as unknown as StreamableAgent, DOCUMENT_EXTRACTOR_AGENT_NAME, invocation, {
         runId: invocation.runId,
@@ -75,10 +78,19 @@ export class AgentRunnerService implements OnModuleInit {
     const input = invocation.message === null ? null : { messages: [new HumanMessage(invocation.message)] };
     const startedAt = Date.now();
     const logContext = { runId: scope.runId, threadId, userId };
-    this.logger.log({ ...logContext, agent: agentName, event: 'run.started', resumed: invocation.message === null });
+    this.logger.log({
+      ...logContext,
+      agent: agentName,
+      event: 'run.started',
+      resumed: invocation.message === null,
+    });
 
     const stream = await agent.stream(input as never, {
-      configurable: { thread_id: threadId, user_id: userId, run_id: scope.runId },
+      configurable: {
+        thread_id: threadId,
+        user_id: userId,
+        run_id: scope.runId,
+      },
       context: { userId },
       streamMode: ['updates', 'custom'],
       subgraphs: true,
@@ -94,7 +106,12 @@ export class AgentRunnerService implements OnModuleInit {
         if (event.event === 'agent.message' && event.agent === agentName) finalAnswer = event.text;
       }
     }
-    this.logger.log({ ...logContext, agent: agentName, event: 'run.finished', durationMs: Date.now() - startedAt });
+    this.logger.log({
+      ...logContext,
+      agent: agentName,
+      event: 'run.finished',
+      durationMs: Date.now() - startedAt,
+    });
     return finalAnswer;
   }
 }

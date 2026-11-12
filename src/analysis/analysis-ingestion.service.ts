@@ -10,7 +10,8 @@ import { GmailService, type RawGmailMessage } from '../gmail/gmail.service.js';
 
 /**
  * Fetches last week's inbox of every connected Gmail account and lays every email out in the agent's Postgres-backed workspace:
- * the body as markdown and each attachment as its original bytes. Nothing is put in the prompt.
+ * the body as markdown and each attachment (PDFs and images alike) as its original bytes, stored with its
+ * real type. Nothing is put in the prompt.
  */
 @Injectable()
 export class AnalysisIngestionService {
@@ -38,11 +39,20 @@ export class AnalysisIngestionService {
         const files = parsed.files.map((file, index) => ({
           path: attachmentPath(emailId, attachmentFileName(file.fileName, file.contentType, index, taken)),
           content: new Uint8Array(file.content),
+          mimeType: file.contentType,
         }));
 
         await this.workspace.writeFiles(userId, runId, [
-          [emailMarkdownPath(emailId), renderEmailMarkdown(emailId, parsed, files.map((file) => file.path))],
-          ...files.map((file) => [file.path, file.content] as [string, Uint8Array]),
+          {
+            path: emailMarkdownPath(emailId),
+            content: renderEmailMarkdown(
+              emailId,
+              parsed,
+              files.map((file) => file.path),
+            ),
+            mimeType: 'text/markdown',
+          },
+          ...files,
         ]);
 
         rows.push({
@@ -61,7 +71,14 @@ export class AnalysisIngestionService {
           triageReason: null,
         });
       } catch (error) {
-        this.logger.warn({ runId, gmailMessageId: message.gmailMessageId, error: (error as Error).message }, 'Skipped unparsable email');
+        this.logger.warn(
+          {
+            runId,
+            gmailMessageId: message.gmailMessageId,
+            error: (error as Error).message,
+          },
+          'Skipped unparsable email',
+        );
       }
     }
 

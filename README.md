@@ -13,7 +13,7 @@ LangGraph Postgres checkpointer & store · S3 (server-side writes, presigned dow
 ```bash
 pnpm install
 cp .env.example .env   # fill in the values
-pnpm start:dev         # runs migrations on boot, creates the langgraph + pgboss schemas
+pnpm start:dev         # runs migrations on boot (DATABASE_MIGRATE_ON_BOOT), creates the langgraph + pgboss schemas
 ```
 
 | Script | What it does |
@@ -21,7 +21,24 @@ pnpm start:dev         # runs migrations on boot, creates the langgraph + pgboss
 | `pnpm check` | typecheck + lint (oxlint, incl. domain-purity rule) + unit tests |
 | `pnpm test:e2e` | HTTP-level tests (auth guard) |
 | `pnpm build && pnpm agent:smoke` | Real end-to-end agent run on 4 fixture emails (ES PDF factura, EN image receipt, newsletter, shipping notice) against your Postgres, S3 and OpenAI; cleans up after itself |
-| `pnpm build && pnpm migration:run` | Run migrations manually |
+| `pnpm build && pnpm migration:run` | Apply pending migrations and exit (non-zero on failure) |
+| `pnpm build && pnpm migration:show` | List migrations and whether each one is applied |
+| `pnpm build && pnpm migration:revert` | Revert the last applied migration |
+
+### Database migrations in the cloud
+
+Run migrations as a **release / pre-deploy step**, before new app instances start, and keep app servers out of it:
+
+1. Build the image as usual (`pnpm build`; the migrations are compiled into `dist/`).
+2. Release step: `node dist/database/migrate.js` with `POSTGRESQL_URL` in the environment (no `.env` needed).
+   It applies every pending migration in **one transaction** and exits 0, or rolls back and exits 1, which should
+   stop the deploy.
+3. Set `DATABASE_MIGRATE_ON_BOOT=false` on the app instances.
+
+Both paths (the release step and boot-time migrations) take the same Postgres advisory lock, so concurrent deploys
+or replicas booting at the same time wait for each other instead of running a migration twice. Migrations must
+stay backwards compatible with the version still serving traffic while the new one rolls out (add first,
+remove in a later release).
 
 ### External setup
 

@@ -4,7 +4,7 @@
  *
  *   /inbox/{emailId}/email.md                  headers, attachment manifest, plain-text body
  *   /inbox/{emailId}/attachments/{fileName}    original bytes (PDFs and images are read natively by the model)
- *   /uploads/{fileName}.pdf                    a PDF the user imported (one per thread)
+ *   /uploads/{fileName}.{pdf|jpg|heic|…}       an invoice file (PDF or image) the user imported (one per thread)
  */
 export const INBOX_ROUTE = '/inbox/';
 export const UPLOADS_ROUTE = '/uploads/';

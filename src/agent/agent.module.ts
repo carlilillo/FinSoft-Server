@@ -10,7 +10,13 @@ import { AgentToolsFactory } from './tools/agent-tools.factory.js';
 
 @Module({
   imports: [EmailsModule, InvoicesModule, DocumentsModule],
-  providers: [AgentPersistenceService, AgentWorkspaceService, AgentToolsFactory, InvoiceAgentFactory, AgentRunnerService],
+  providers: [
+    AgentPersistenceService,
+    AgentWorkspaceService,
+    AgentToolsFactory,
+    InvoiceAgentFactory,
+    AgentRunnerService,
+  ],
   exports: [AgentPersistenceService, AgentWorkspaceService, AgentRunnerService],
 })
 export class AgentModule {}

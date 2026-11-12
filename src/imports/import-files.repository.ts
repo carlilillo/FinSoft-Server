@@ -6,7 +6,10 @@ import { ImportFileEntity } from './entities/import-file.entity.js';
 
 @Injectable()
 export class ImportFilesRepository {
-  constructor(@InjectRepository(ImportFileEntity) private readonly repo: Repository<ImportFileEntity>) {}
+  constructor(
+    @InjectRepository(ImportFileEntity)
+    private readonly repo: Repository<ImportFileEntity>,
+  ) {}
 
   async insertMany(files: Array<Omit<ImportFileEntity, 'createdAt'>>): Promise<void> {
     if (files.length === 0) return;
@@ -18,11 +21,17 @@ export class ImportFilesRepository {
   }
 
   findPendingForRun(runId: string): Promise<ImportFileEntity[]> {
-    return this.repo.find({ where: { runId, status: 'pending' }, order: { id: 'ASC' } });
+    return this.repo.find({
+      where: { runId, status: 'pending' },
+      order: { id: 'ASC' },
+    });
   }
 
   async findIdsForUser(userId: string): Promise<string[]> {
-    const rows = await this.repo.find({ where: { userId }, select: { id: true } });
+    const rows = await this.repo.find({
+      where: { userId },
+      select: { id: true },
+    });
     return rows.map((row) => row.id);
   }
 

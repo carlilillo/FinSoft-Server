@@ -7,7 +7,7 @@ import {
 
 export type RunStatus = 'pending' | 'ingesting' | 'extracting' | 'awaiting_review' | 'failed';
 
-/** Where the session's documents come from: the Gmail inbox, or PDFs the user imported by hand. */
+/** Where the session's documents come from: the Gmail inbox, or invoice files (PDFs or images) the user imported by hand. */
 export type RunSource = 'gmail' | 'upload';
 
 export interface AnalysisRunState {
@@ -73,7 +73,7 @@ export class AnalysisRun {
     });
   }
 
-  /** A session fed by PDFs the user imported: no inbox, every document goes straight to extraction. */
+  /** A session fed by invoice files (PDFs or images) the user imported: no inbox, every document goes straight to extraction. */
   static startImport(props: { id: string; userId: string; active: ActiveRuns; documentsTotal: number }): AnalysisRun {
     assertCanStartRun(props.active);
     return new AnalysisRun({
@@ -91,7 +91,12 @@ export class AnalysisRun {
   }
 
   beginIngestion(): void {
-    this.state = { ...this.state, status: 'ingesting', stageDetail: 'Fetching your emails', error: null };
+    this.state = {
+      ...this.state,
+      status: 'ingesting',
+      stageDetail: 'Fetching your emails',
+      error: null,
+    };
   }
 
   beginExtraction(emailsTotal: number): void {
@@ -116,11 +121,22 @@ export class AnalysisRun {
   }
 
   complete(now: Date): void {
-    this.state = { ...this.state, status: 'awaiting_review', stageDetail: null, finishedAt: now };
+    this.state = {
+      ...this.state,
+      status: 'awaiting_review',
+      stageDetail: null,
+      finishedAt: now,
+    };
   }
 
   fail(reason: string, now: Date): void {
-    this.state = { ...this.state, status: 'failed', stageDetail: null, error: reason, finishedAt: now };
+    this.state = {
+      ...this.state,
+      status: 'failed',
+      stageDetail: null,
+      error: reason,
+      finishedAt: now,
+    };
   }
 
   /** The user asked to re-run the same thread with a corrected email selection. */

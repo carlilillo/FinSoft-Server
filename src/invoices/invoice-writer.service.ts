@@ -17,7 +17,7 @@ export interface InvoiceProvenance {
   emailId: string | null;
   /** The Gmail account that email arrived in; null when the invoice did not come from an inbox. */
   gmailConnectionId: string | null;
-  /** The imported PDF the invoice was read from, when it did not come from an email. */
+  /** The imported document (PDF or image) the invoice was read from, when it did not come from an email. */
   importFileId: string | null;
 }
 
@@ -45,7 +45,11 @@ export class InvoiceWriterService {
       const vendor = await this.upsertVendor(manager, provenance.userId, extracted.vendor);
       const existing = draft.invoiceNumber
         ? await manager.findOne(InvoiceEntity, {
-            where: { userId: provenance.userId, vendorId: vendor.id, invoiceNumber: draft.invoiceNumber },
+            where: {
+              userId: provenance.userId,
+              vendorId: vendor.id,
+              invoiceNumber: draft.invoiceNumber,
+            },
           })
         : null;
 
@@ -65,8 +69,18 @@ export class InvoiceWriterService {
   }
 
   /** Replaces the invoice's lines; products are upserted per vendor so price history accumulates. */
-  async saveLines(userId: string, invoiceId: string, extractedLines: ExtractedLine[]): Promise<{ lineCount: number; productIds: string[]; emailId: string | null }> {
-    const invoice = await this.dataSource.manager.findOne(InvoiceEntity, { where: { id: invoiceId, userId } });
+  async saveLines(
+    userId: string,
+    invoiceId: string,
+    extractedLines: ExtractedLine[],
+  ): Promise<{
+    lineCount: number;
+    productIds: string[];
+    emailId: string | null;
+  }> {
+    const invoice = await this.dataSource.manager.findOne(InvoiceEntity, {
+      where: { id: invoiceId, userId },
+    });
     if (!invoice) throw new NotFoundException(`Invoice ${invoiceId} not found; call save_invoice first`);
 
     const lines = validateInvoiceLines(invoice, extractedLines.map(toLineDraft));
@@ -93,13 +107,19 @@ export class InvoiceWriterService {
           position,
         });
       }
-      return { lineCount: lines.length, productIds: [...new Set(productIds)], emailId: invoice.emailId };
+      return {
+        lineCount: lines.length,
+        productIds: [...new Set(productIds)],
+        emailId: invoice.emailId,
+      };
     });
   }
 
   private async upsertVendor(manager: EntityManager, userId: string, vendor: ExtractedVendor): Promise<VendorEntity> {
     const normalizedKey = normalizeVendorKey(vendor.name, vendor.taxId);
-    const existing = await manager.findOne(VendorEntity, { where: { userId, normalizedKey } });
+    const existing = await manager.findOne(VendorEntity, {
+      where: { userId, normalizedKey },
+    });
     const merged = manager.create(VendorEntity, {
       id: existing?.id ?? newId(),
       userId,
@@ -123,10 +143,16 @@ export class InvoiceWriterService {
     line: InvoiceLineDraft,
   ): Promise<ProductEntity> {
     const normalizedKey = normalizeProductKey(line.description, line.sku);
-    const existing = await manager.findOne(ProductEntity, { where: { userId, vendorId, normalizedKey } });
+    const existing = await manager.findOne(ProductEntity, {
+      where: { userId, vendorId, normalizedKey },
+    });
     if (existing) {
       if ((!existing.sku && line.sku) || (!existing.unit && line.unit)) {
-        await manager.update(ProductEntity, { id: existing.id }, { sku: existing.sku ?? line.sku, unit: existing.unit ?? line.unit });
+        await manager.update(
+          ProductEntity,
+          { id: existing.id },
+          { sku: existing.sku ?? line.sku, unit: existing.unit ?? line.unit },
+        );
       }
       return existing;
     }

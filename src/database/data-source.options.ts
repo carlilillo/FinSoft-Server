@@ -3,6 +3,7 @@ import { InitialSchema1762646400000 } from './migrations/1762646400000-initial-s
 import { InvoiceImports1762819200000 } from './migrations/1762819200000-invoice-imports.js';
 import { AnalysisSchedules1762905600000 } from './migrations/1762905600000-analysis-schedules.js';
 import { GmailAccounts1762992000000 } from './migrations/1762992000000-gmail-accounts.js';
+import { ImageImports1763078400000 } from './migrations/1763078400000-image-imports.js';
 import { UserEntity } from '../users/entities/user.entity.js';
 import { GmailConnectionEntity } from '../gmail/entities/gmail-connection.entity.js';
 import { AnalysisRunEntity } from '../analysis/entities/analysis-run.entity.js';
@@ -39,6 +40,7 @@ export function buildDataSourceOptions(url: string): DataSourceOptions {
       InvoiceImports1762819200000,
       AnalysisSchedules1762905600000,
       GmailAccounts1762992000000,
+      ImageImports1763078400000,
     ],
     synchronize: false,
     ssl: requiresSsl(url) ? { rejectUnauthorized: false } : undefined,

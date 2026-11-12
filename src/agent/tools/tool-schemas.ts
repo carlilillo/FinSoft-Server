@@ -60,8 +60,12 @@ export const saveInvoiceProductsSchema = z.object({
 
 export const storeInvoiceDocumentSchema = z.object({
   invoiceId: ulid.describe('Returned by save_invoice'),
-  path: z.string().describe('Attachment path, e.g. /inbox/{emailId}/attachments/factura.pdf'),
+  path: z
+    .string()
+    .describe('Attachment path (PDF or image), e.g. /inbox/{emailId}/attachments/factura.pdf or …/IMG_0042.jpg'),
 });
 
-/** Imported PDFs have no email: the session and file come from the runtime. */
-export const saveImportedInvoiceSchema = saveInvoiceSchema.omit({ emailId: true });
+/** Imported documents (PDFs or images) have no email: the session and file come from the runtime. */
+export const saveImportedInvoiceSchema = saveInvoiceSchema.omit({
+  emailId: true,
+});

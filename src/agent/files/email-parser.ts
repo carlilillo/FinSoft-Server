@@ -1,18 +1,35 @@
 import { type AddressObject, simpleParser } from 'mailparser';
 import { convert as htmlToText } from 'html-to-text';
-import { isRelevantAttachment, type ParsedEmail } from '../domain/email-document.js';
+import { isRelevantAttachment, type ParsedEmail, resolveAttachmentType } from '../domain/email-document.js';
 
 export interface ParsedEmailWithFiles extends ParsedEmail {
-  files: Array<{ fileName: string | null; contentType: string; content: Buffer }>;
+  files: Array<{
+    fileName: string | null;
+    contentType: string;
+    content: Buffer;
+  }>;
 }
 
-/** Parses a raw RFC 822 message into headers, a plain-text body and the attachments worth reading. */
+/**
+ * Parses a raw RFC 822 message into headers, a plain-text body and the attachments worth reading.
+ * Every attachment is typed from its content, so a photo of a receipt sent as "application/octet-stream"
+ * or inline (as phones do) is kept as the image it is.
+ */
 export async function parseRawEmail(raw: Buffer): Promise<ParsedEmailWithFiles> {
   const parsed = await simpleParser(raw, { skipImageLinks: true });
   const from = firstAddress(parsed.from);
-  const relevant = parsed.attachments.filter((attachment) =>
-    isRelevantAttachment(attachment.contentType, attachment.size, attachment.contentDisposition === 'inline'),
-  );
+  const relevant = parsed.attachments
+    .map((attachment) => ({
+      ...attachment,
+      contentType: resolveAttachmentType(attachment.contentType, attachment.content),
+    }))
+    .filter((attachment) =>
+      isRelevantAttachment({
+        contentType: attachment.contentType,
+        sizeBytes: attachment.size,
+        embedded: attachment.contentDisposition === 'inline' || attachment.related === true,
+      }),
+    );
 
   return {
     subject: parsed.subject ?? null,

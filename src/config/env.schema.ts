@@ -6,6 +6,11 @@ export const envSchema = z.object({
   CLIENT_URL: z.url(),
 
   POSTGRESQL_URL: z.string().min(1),
+  /**
+   * Apply pending migrations when the app boots (handy in development). In the cloud, run
+   * `node dist/database/migrate.js` as a release step and set this to false.
+   */
+  DATABASE_MIGRATE_ON_BOOT: z.stringbool().default(true),
 
   AWS_ACCESS_KEY_ID: z.string().min(1),
   AWS_SECRET_ACCESS_KEY: z.string().min(1),

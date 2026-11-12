@@ -21,8 +21,12 @@ export class AgentPersistenceService implements OnModuleInit, OnApplicationShutd
 
   constructor(config: AppConfigService) {
     const url = config.get('POSTGRESQL_URL');
-    this.checkpointer = PostgresSaver.fromConnString(url, { schema: LANGGRAPH_SCHEMA });
-    this.postgresStore = PostgresStore.fromConnString(url, { schema: LANGGRAPH_SCHEMA });
+    this.checkpointer = PostgresSaver.fromConnString(url, {
+      schema: LANGGRAPH_SCHEMA,
+    });
+    this.postgresStore = PostgresStore.fromConnString(url, {
+      schema: LANGGRAPH_SCHEMA,
+    });
     this.store = new BinarySafeStore(this.postgresStore);
   }
 
@@ -37,7 +41,9 @@ export class AgentPersistenceService implements OnModuleInit, OnApplicationShutd
   }
 
   async hasCheckpoint(threadId: string): Promise<boolean> {
-    const tuple = await this.checkpointer.getTuple({ configurable: { thread_id: threadId } });
+    const tuple = await this.checkpointer.getTuple({
+      configurable: { thread_id: threadId },
+    });
     return tuple !== undefined;
   }
 
@@ -45,7 +51,9 @@ export class AgentPersistenceService implements OnModuleInit, OnApplicationShutd
   async purgeThreads(userId: string, threadIds: string[]): Promise<void> {
     for (const threadId of threadIds) await this.checkpointer.deleteThread(threadId);
 
-    const namespaces = await this.store.listNamespaces({ prefix: userNamespacePrefix(userId) });
+    const namespaces = await this.store.listNamespaces({
+      prefix: userNamespacePrefix(userId),
+    });
     for (const namespace of namespaces) {
       let items = await this.store.search(namespace, { limit: 100 });
       while (items.length > 0) {

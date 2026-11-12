@@ -21,8 +21,9 @@
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check": "pnpm typecheck && pnpm lint && pnpm test",
-    "migration:run": "node --env-file=.env ./node_modules/typeorm/cli.js migration:run -d dist/database/data-source.js",
-    "migration:revert": "node --env-file=.env ./node_modules/typeorm/cli.js migration:revert -d dist/database/data-source.js",
+    "migration:run": "node --env-file-if-exists=.env dist/database/migrate.js",
+    "migration:revert": "node --env-file-if-exists=.env ./node_modules/typeorm/cli.js migration:revert -d dist/database/data-source.js",
+    "migration:show": "node --env-file-if-exists=.env ./node_modules/typeorm/cli.js migration:show -d dist/database/data-source.js",
     "agent:smoke": "node --env-file=.env dist/scripts/agent-smoke.js"
   },
   "dependencies": {
@@ -33,6 +34,7 @@
     "@langchain/langgraph": "^1.7.2",
     "@langchain/langgraph-checkpoint-postgres": "^1.1.2",
     "@langchain/openai": "^1.8.2",
+    "@napi-rs/canvas": "^1.1.0",
     "@nestjs/common": "^12.0.1",
     "@nestjs/config": "^12.1.1",
     "@nestjs/core": "^12.0.1",
@@ -43,6 +45,7 @@
     "class-validator": "^0.15.1",
     "deepagents": "^1.16.3",
     "googleapis": "^189.0.0",
+    "heic-decode": "^2.1.0",
     "helmet": "^8.3.0",
     "html-to-text": "^10.0.1",
     "langchain": "^1.6.3",
@@ -55,12 +58,12 @@
     "pino-pretty": "^13.2.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "sharp": "^0.35.5",
     "typeorm": "^1.1.2",
     "ulid": "^3.0.2",
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@napi-rs/canvas": "^1.1.0",
     "@nestjs/cli": "^12.0.0",
     "@nestjs/mau": "^0.2.6",
     "@nestjs/schematics": "^12.0.0",

@@ -2,7 +2,7 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryColumn } from 'typeorm'
 import { bigintToNumber, CLERK_USER_ID_COLUMN, ULID_COLUMN } from '../../database/column-types.js';
 import type { ImportFileStatus } from '../domain/import-file.js';
 
-/** A PDF the user imported by hand. Its id is also the LangGraph thread_id of its extraction. */
+/** An invoice file (PDF or image) the user imported by hand. Its id is also the LangGraph thread_id of its extraction. */
 @Entity('import_files')
 @Index(['runId'])
 export class ImportFileEntity {
@@ -19,9 +19,13 @@ export class ImportFileEntity {
   @Column({ name: 'file_name', type: 'varchar', length: 255 })
   fileName: string;
 
-  /** Path of the PDF in the agent workspace. */
+  /** Path of the original file in the agent workspace. */
   @Column({ name: 'workspace_path', type: 'varchar', length: 255 })
   workspacePath: string;
+
+  /** Real format, read from the file's content: application/pdf or an image type. */
+  @Column({ name: 'mime_type', type: 'varchar', length: 127 })
+  mimeType: string;
 
   @Column({ name: 'size_bytes', type: 'bigint', transformer: bigintToNumber })
   sizeBytes: number;

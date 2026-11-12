@@ -5,7 +5,7 @@ import { AgentWorkspaceService } from '../agent/files/workspace.service.js';
 import { AppConfigService } from '../config/app-config.service.js';
 import { DomainError } from '../common/domain/domain-error.js';
 import { DocumentsService } from '../documents/documents.service.js';
-import { IMPORT_MIME_TYPE, resolveImportOutcome } from '../imports/domain/import-file.js';
+import { resolveImportOutcome } from '../imports/domain/import-file.js';
 import type { ImportFileEntity } from '../imports/entities/import-file.entity.js';
 import { ImportFilesRepository } from '../imports/import-files.repository.js';
 import { InvoicesRepository } from '../invoices/invoices.repository.js';
@@ -59,13 +59,21 @@ export class AnalysisProcessor implements OnApplicationBootstrap {
         await this.runImport(run, job.userId);
       } else if (retryCount > 0 && (await this.persistence.hasCheckpoint(job.runId))) {
         this.logger.log({ runId: job.runId, retryCount }, 'Resuming thread from last checkpoint');
-        await this.agent.run({ userId: job.userId, threadId: job.runId, message: null });
+        await this.agent.run({
+          userId: job.userId,
+          threadId: job.runId,
+          message: null,
+        });
       } else if (job.kind === 'start') {
         await this.runStart(run, job.userId);
       } else {
         run.beginExtraction(entity.emailsTotal);
         await this.runs.save(run.toState());
-        await this.agent.run({ userId: job.userId, threadId: job.runId, message: job.message });
+        await this.agent.run({
+          userId: job.userId,
+          threadId: job.runId,
+          message: job.message,
+        });
       }
       run.complete(new Date());
       await this.runs.save(run.toState());
@@ -73,10 +81,14 @@ export class AnalysisProcessor implements OnApplicationBootstrap {
       const message = (error as Error).message;
       this.logger.error({ runId: job.runId, retryCount, error: message }, 'Analysis job failed');
       if (retryCount + 1 < MAX_ATTEMPTS) {
-        await this.runs.save({ ...run.toState(), stageDetail: 'Something went wrong; retrying' });
+        await this.runs.save({
+          ...run.toState(),
+          stageDetail: 'Something went wrong; retrying',
+        });
         throw error;
       }
-      if (job.kind === 'import') await this.importFiles.failPending(job.runId, 'The extraction stopped before reaching this document.');
+      if (job.kind === 'import')
+        await this.importFiles.failPending(job.runId, 'The extraction stopped before reaching this document.');
       run.fail(userFacingError(error), new Date());
       await this.runs.save(run.toState());
     }
@@ -91,12 +103,16 @@ export class AnalysisProcessor implements OnApplicationBootstrap {
     await this.runs.save(run.toState());
     if (emails.length === 0) return;
 
-    await this.agent.run({ userId, threadId: run.toState().id, message: buildStartMessage(emails) });
+    await this.agent.run({
+      userId,
+      threadId: run.toState().id,
+      message: buildStartMessage(emails),
+    });
   }
 
   /**
-   * Imported PDFs skip the inbox entirely: one batch of the document extractor, one element (and one
-   * thread) per PDF. On a retry only the documents still pending run again, resuming their threads.
+   * Imported files (PDFs and images) skip the inbox entirely: one batch of the document extractor, one
+   * element (and one thread) per file. On a retry only the documents still pending run again, resuming their threads.
    */
   private async runImport(run: AnalysisRun, userId: string): Promise<void> {
     const runId = run.toState().id;
@@ -109,7 +125,9 @@ export class AnalysisProcessor implements OnApplicationBootstrap {
         userId,
         runId,
         threadId: file.id,
-        message: (await this.persistence.hasCheckpoint(file.id)) ? null : buildDocumentMessage(file.workspacePath, file.fileName),
+        message: (await this.persistence.hasCheckpoint(file.id))
+          ? null
+          : buildDocumentMessage(file.workspacePath, file.fileName, file.mimeType),
       })),
     );
     const results = await this.agent.extractDocuments(invocations, DOCUMENT_BATCH_CONCURRENCY);
@@ -119,13 +137,23 @@ export class AnalysisProcessor implements OnApplicationBootstrap {
       if (result.status === 'fulfilled') {
         await this.finishDocument(userId, file, result.value);
       } else {
-        this.logger.error({ runId, importFileId: file.id, error: (result.reason as Error).message }, 'Document extraction failed');
-        await this.importFiles.saveOutcome(file.id, { status: 'failed', reason: 'This document could not be processed.' });
+        this.logger.error(
+          {
+            runId,
+            importFileId: file.id,
+            error: (result.reason as Error).message,
+          },
+          'Document extraction failed',
+        );
+        await this.importFiles.saveOutcome(file.id, {
+          status: 'failed',
+          reason: 'This document could not be processed.',
+        });
       }
     }
   }
 
-  /** Attaches the original PDF to every invoice read from it, then records what happened to the document. */
+  /** Attaches the original file (PDF or image) to every invoice read from it, then records what happened to it. */
   private async finishDocument(userId: string, file: ImportFileEntity, finalAnswer: string): Promise<void> {
     const invoiceIds = await this.invoices.findIdsForImportFile(userId, file.id);
     const original = invoiceIds.length > 0 ? await this.readOriginal(userId, file) : null;
@@ -136,7 +164,7 @@ export class AnalysisProcessor implements OnApplicationBootstrap {
         userId,
         invoiceId,
         fileName: file.fileName,
-        mimeType: IMPORT_MIME_TYPE,
+        mimeType: file.mimeType,
         bytes: original,
       });
     }
@@ -146,7 +174,10 @@ export class AnalysisProcessor implements OnApplicationBootstrap {
   private async readOriginal(userId: string, file: ImportFileEntity): Promise<Uint8Array | null> {
     const stored = await this.workspace.readFile(userId, file.id, file.workspacePath);
     if (!stored) {
-      this.logger.warn({ importFileId: file.id }, 'Imported PDF missing from the workspace; invoices kept without it');
+      this.logger.warn(
+        { importFileId: file.id },
+        'Imported document missing from the workspace; invoices kept without it',
+      );
       return null;
     }
     return typeof stored.content === 'string' ? new TextEncoder().encode(stored.content) : stored.content;
@@ -162,6 +193,7 @@ function userFacingError(error: unknown): string {
   if (/invalid_grant/i.test(message)) {
     return 'Gmail access expired or was revoked. Reconnect Gmail and run the analysis again.';
   }
-  if (/rate limit|429/i.test(message)) return 'The AI service is busy right now. Try the analysis again in a few minutes.';
+  if (/rate limit|429/i.test(message))
+    return 'The AI service is busy right now. Try the analysis again in a few minutes.';
   return 'The analysis stopped unexpectedly. Everything found so far was saved; you can re-run it.';
 }

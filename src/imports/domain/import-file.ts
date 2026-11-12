@@ -1,19 +1,27 @@
 import { DomainError } from '../../common/domain/domain-error.js';
+import {
+  detectInvoiceFileFormat,
+  type InvoiceFileFormat,
+  SUPPORTED_INVOICE_FORMATS,
+} from '../../documents/domain/document-format.js';
 
 /** Outcome of extracting one imported document. */
 export type ImportFileStatus = 'pending' | 'extracted' | 'not_invoice' | 'failed';
 
 export const MAX_IMPORT_FILES = 10;
 export const MAX_IMPORT_FILE_BYTES = 20 * 1024 * 1024;
-export const IMPORT_MIME_TYPE = 'application/pdf';
-
-const PDF_SIGNATURE = [0x25, 0x50, 0x44, 0x46, 0x2d]; // "%PDF-"
 
 export interface IncomingFile {
   fileName: string;
+  /** Declared by the browser; not trusted (phones often send "" or "application/octet-stream"). */
   mimeType: string;
   sizeBytes: number;
   bytes: Uint8Array;
+}
+
+/** An incoming file whose real format (read from its bytes) is a PDF or a supported image. */
+export interface ImportableFile extends IncomingFile {
+  format: InvoiceFileFormat;
 }
 
 export interface ImportOutcome {
@@ -24,7 +32,7 @@ export interface ImportOutcome {
 export class NoFilesToImportError extends DomainError {
   readonly code = 'NO_FILES_TO_IMPORT';
   constructor() {
-    super('Choose at least one PDF invoice to import');
+    super('Choose at least one invoice (PDF or image) to import');
   }
 }
 
@@ -35,10 +43,10 @@ export class TooManyImportFilesError extends DomainError {
   }
 }
 
-export class ImportFileNotPdfError extends DomainError {
-  readonly code = 'IMPORT_FILE_NOT_PDF';
+export class UnsupportedImportFileError extends DomainError {
+  readonly code = 'IMPORT_FILE_UNSUPPORTED';
   constructor(fileName: string) {
-    super(`${fileName} is not a PDF. Only PDF invoices can be imported.`);
+    super(`${fileName} is not a PDF or a supported image. Invoices can be imported as ${SUPPORTED_INVOICE_FORMATS}.`);
   }
 }
 
@@ -49,30 +57,31 @@ export class ImportFileTooLargeError extends DomainError {
   }
 }
 
-/** Checks the batch and every file's real content (not just its declared type) before anything is stored. */
-export function assertImportable(files: IncomingFile[]): void {
+/**
+ * Checks the batch and every file before anything is stored. A file's format comes from its content,
+ * not its declared type or name: PDFs and images (photos, scans, screenshots) are equally invoices.
+ */
+export function assertImportable(files: IncomingFile[]): ImportableFile[] {
   if (files.length === 0) throw new NoFilesToImportError();
   if (files.length > MAX_IMPORT_FILES) throw new TooManyImportFilesError(files.length);
-  for (const file of files) {
+  return files.map((file) => {
     if (file.sizeBytes <= 0 || file.sizeBytes > MAX_IMPORT_FILE_BYTES) throw new ImportFileTooLargeError(file.fileName);
-    if (file.mimeType !== IMPORT_MIME_TYPE || !isPdf(file.bytes)) throw new ImportFileNotPdfError(file.fileName);
-  }
+    const format = detectInvoiceFileFormat(file.bytes);
+    if (!format) throw new UnsupportedImportFileError(file.fileName);
+    return { ...file, format };
+  });
 }
 
-export function isPdf(bytes: Uint8Array): boolean {
-  return PDF_SIGNATURE.every((byte, index) => bytes[index] === byte);
-}
-
-/** Workspace-safe file name that always ends in ".pdf" (the agent filesystem infers MIME types from extensions). */
-export function importFileName(original: string): string {
+/** Workspace-safe file name whose extension always matches the file's real format. */
+export function importFileName(original: string, format: InvoiceFileFormat): string {
   const base = original
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '')
-    .replace(/\.pdf$/i, '')
+    .replace(/\.[a-z0-9]{1,5}$/i, '')
     .replace(/[^a-zA-Z0-9._-]+/g, '_')
     .replace(/^[._]+/, '')
     .slice(0, 100);
-  return `${base || 'invoice'}.pdf`;
+  return `${base || 'invoice'}${format.extension}`;
 }
 
 /**
@@ -83,9 +92,16 @@ export function resolveImportOutcome(finalMessage: string, invoicesStored: numbe
   if (invoicesStored > 0) return { status: 'extracted', reason: null };
   const text = finalMessage.trim();
   const notInvoice = /NOT_AN_INVOICE:?\s*(.*)/is.exec(text);
-  if (notInvoice) return { status: 'not_invoice', reason: shorten(notInvoice[1]) ?? 'This document is not an invoice.' };
+  if (notInvoice)
+    return {
+      status: 'not_invoice',
+      reason: shorten(notInvoice[1]) ?? 'This document is not an invoice.',
+    };
   const failed = /FAILED:?\s*(.*)/is.exec(text);
-  return { status: 'failed', reason: shorten(failed?.[1]) ?? 'No invoice could be extracted from this document.' };
+  return {
+    status: 'failed',
+    reason: shorten(failed?.[1]) ?? 'No invoice could be extracted from this document.',
+  };
 }
 
 function shorten(reason: string | undefined): string | null {

@@ -12,8 +12,19 @@ export type AgentLogEvent =
   | { event: 'agent.message'; agent: AgentName; text: string }
   | { event: 'agent.reasoning'; agent: AgentName; text: string }
   | { event: 'tool.called'; agent: AgentName; tool: string; args: string }
-  | { event: 'tool.result'; agent: AgentName; tool: string; result: string; isError: boolean }
-  | { event: 'subagent.started'; agent: AgentName; subagent: string; task: string }
+  | {
+      event: 'tool.result';
+      agent: AgentName;
+      tool: string;
+      result: string;
+      isError: boolean;
+    }
+  | {
+      event: 'subagent.started';
+      agent: AgentName;
+      subagent: string;
+      task: string;
+    }
   | { event: 'subagent.finished'; agent: AgentName; result: string }
   | { event: 'todos.updated'; agent: AgentName; todos: string }
   | { event: 'custom'; agent: AgentName; payload: Record<string, unknown> };
@@ -36,7 +47,9 @@ interface TodoLike {
 
 export function agentForNamespace(namespace: string[], root: RootAgentName = 'invoice-triage'): AgentName {
   if (root === 'document-extractor') return root;
-  return namespace.some((segment) => segment.startsWith('tools:') || segment.startsWith('task')) ? 'invoice-extractor' : root;
+  return namespace.some((segment) => segment.startsWith('tools:') || segment.startsWith('task'))
+    ? 'invoice-extractor'
+    : root;
 }
 
 export function mapAgentChunk(
@@ -52,7 +65,12 @@ export function mapAgentChunk(
   const events: AgentLogEvent[] = [];
   for (const update of Object.values(data)) {
     if (!isRecord(update)) continue;
-    if (Array.isArray(update.todos)) events.push({ event: 'todos.updated', agent, todos: formatTodos(update.todos as TodoLike[]) });
+    if (Array.isArray(update.todos))
+      events.push({
+        event: 'todos.updated',
+        agent,
+        todos: formatTodos(update.todos as TodoLike[]),
+      });
     const messages = Array.isArray(update.messages) ? (update.messages as MessageLike[]) : [];
     for (const message of messages) events.push(...mapMessage(agent, message));
   }
@@ -65,7 +83,15 @@ function mapMessage(agent: AgentName, message: MessageLike): AgentLogEvent[] {
   if (type === 'tool') {
     const result = textOf(message.content);
     if (message.name === 'task') return [{ event: 'subagent.finished', agent, result: truncate(result) }];
-    return [{ event: 'tool.result', agent, tool: message.name ?? 'unknown', result: truncate(result), isError: result.startsWith('Error') }];
+    return [
+      {
+        event: 'tool.result',
+        agent,
+        tool: message.name ?? 'unknown',
+        result: truncate(result),
+        isError: result.startsWith('Error'),
+      },
+    ];
   }
   return [];
 }
@@ -88,7 +114,12 @@ function mapAiMessage(agent: AgentName, message: MessageLike): AgentLogEvent[] {
       });
       continue;
     }
-    events.push({ event: 'tool.called', agent, tool: call.name, args: truncate(JSON.stringify(call.args)) });
+    events.push({
+      event: 'tool.called',
+      agent,
+      tool: call.name,
+      args: truncate(JSON.stringify(call.args)),
+    });
   }
   return events;
 }
@@ -107,7 +138,9 @@ function reasoningOf(message: MessageLike): string {
   if (fromKwargs.trim()) return fromKwargs.trim();
   if (!Array.isArray(message.content)) return '';
   return message.content
-    .map((block) => (isRecord(block) && block.type === 'reasoning' && typeof block.reasoning === 'string' ? block.reasoning : ''))
+    .map((block) =>
+      isRecord(block) && block.type === 'reasoning' && typeof block.reasoning === 'string' ? block.reasoning : '',
+    )
     .join(' ')
     .trim();
 }

@@ -21,7 +21,8 @@ The /inbox/ folder is read-only for you.
    reason in English, and the email's language ("en", "es" or "other").
 4. For each likely invoice, call the task tool with subagent_type "invoice-extractor" and a description containing
    the emailId and the attachment paths, e.g.:
-   "emailId: 01J…; attachments: /inbox/01J…/attachments/factura-123.pdf". You may delegate several in parallel.
+   "emailId: 01J…; attachments: /inbox/01J…/attachments/factura-123.pdf, /inbox/01J…/attachments/IMG_0042.heic".
+   Always pass every attachment path, images included. You may delegate several in parallel.
 5. When a subagent reports it could not extract an invoice, call record_triage again for that email with verdict
    "not_invoice" (it was not an invoice) or "failed" (it was an invoice but could not be read), with the reason.
 6. Finish with a short plain summary: how many emails you reviewed, invoices extracted, and anything that failed.
@@ -32,9 +33,13 @@ subscription renewals with an amount charged, utility/telecom bills, purchase re
 Typical cues — English: "invoice", "receipt", "your bill", "payment received", "amount due", "order total".
 Spanish: "factura", "adjuntamos su factura", "recibo", "ticket de compra", "justificante de pago", "importe",
 "cargo en su cuenta", "su pedido", "domiciliación".
+Invoices arrive as PDFs or as images (photos, scans, screenshots: .jpg, .png, .heic, .tiff…); judge an image
+attachment exactly like a PDF. A photo or scan forwarded with little or no text (e.g. "Sent from my iPhone",
+"ticket", "factura" or an empty body with IMG_0042.heic attached) is usually a receipt the user is filing.
 Not an invoice: newsletters, marketing and promotions, shipping/tracking updates without amounts, password resets,
 calendar invites, quotes or estimates (presupuesto, cotización, quote) not yet billed, account notices, personal mail.
-When unsure and the email has a PDF or image attachment from a company, prefer "likely_invoice".
+When unsure and the email has a PDF or image attachment from a company, or a photo or scan the user forwarded,
+prefer "likely_invoice".
 
 ## Re-runs
 The user can later reply in this same conversation telling you which emails really contain invoices. Treat that

@@ -7,7 +7,10 @@ import { AppConfigService } from '../config/app-config.service.js';
 import { AgentPersistenceService } from './agent-persistence.service.js';
 import { INBOX_ROUTE, UPLOADS_ROUTE, type WorkspaceArea, workspaceNamespace } from './files/workspace-paths.js';
 import { nativeFileResultsMiddleware } from './middleware/native-file-results.middleware.js';
-import { DOCUMENT_EXTRACTOR_AGENT_NAME, DOCUMENT_EXTRACTOR_SYSTEM_PROMPT } from './prompts/document-extractor.prompt.js';
+import {
+  DOCUMENT_EXTRACTOR_AGENT_NAME,
+  DOCUMENT_EXTRACTOR_SYSTEM_PROMPT,
+} from './prompts/document-extractor.prompt.js';
 import { EXTRACTOR_AGENT_NAME, EXTRACTOR_DESCRIPTION, EXTRACTOR_SYSTEM_PROMPT } from './prompts/extractor.prompt.js';
 import { TRIAGE_AGENT_NAME, TRIAGE_SYSTEM_PROMPT } from './prompts/triage.prompt.js';
 import { AgentToolsFactory } from './tools/agent-tools.factory.js';
@@ -16,7 +19,11 @@ export const agentContextSchema = z.object({ userId: z.string() });
 
 /** The inbox and uploads hold the user's original documents: the model reads them but never changes them. */
 const WORKSPACE_PERMISSIONS = [
-  { operations: ['write' as const], paths: ['/inbox/**', '/uploads/**'], mode: 'deny' as const },
+  {
+    operations: ['write' as const],
+    paths: ['/inbox/**', '/uploads/**'],
+    mode: 'deny' as const,
+  },
 ];
 
 @Injectable()
@@ -53,7 +60,7 @@ export class InvoiceAgentFactory {
   }
 
   /**
-   * Extracts ONE imported PDF per thread: no inbox, no triage, no subagent. Its thread id is the
+   * Extracts ONE imported document (PDF or image) per thread: no inbox, no triage, no subagent. Its thread id is the
    * imported file id and `run_id` (configurable) is the extraction session it belongs to.
    */
   createDocumentExtractor() {

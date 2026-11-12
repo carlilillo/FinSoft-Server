@@ -17,16 +17,21 @@ export function buildStartMessage(emails: EmailReference[]): string {
   ].join('\n');
 }
 
-/** First message of an imported document's thread: the path only; the extractor reads the PDF itself. */
-export function buildDocumentMessage(workspacePath: string, originalName: string): string {
+/** First message of an imported document's thread: the path only; the extractor reads the file (PDF or image) itself. */
+export function buildDocumentMessage(workspacePath: string, originalName: string, mimeType: string): string {
+  const kind = mimeType === 'application/pdf' ? 'a PDF' : `an image (${mimeType})`;
   return [
-    `I imported this invoice by hand: ${workspacePath} (original file name "${originalName}").`,
+    `I imported this invoice by hand: ${workspacePath} (${kind}, original file name "${originalName}").`,
     'Extract every invoice it contains and store them.',
   ].join('\n');
 }
 
 /** The user's correction, sent on the same thread so the agent keeps its earlier context. */
-export function buildContinuationMessage(plan: ContinuationPlan, emails: EmailReference[], note: string | null): string {
+export function buildContinuationMessage(
+  plan: ContinuationPlan,
+  emails: EmailReference[],
+  note: string | null,
+): string {
   const describe = (id: string) => {
     const email = emails.find((candidate) => candidate.id === id);
     return `- ${id} — "${email?.subject ?? '(no subject)'}" from ${email?.senderEmail ?? 'unknown'}`;
@@ -42,7 +47,11 @@ export function buildContinuationMessage(plan: ContinuationPlan, emails: EmailRe
     ...(plan.alreadyExtracted.length > 0 ? plan.alreadyExtracted.map(describe) : ['- none']),
   ];
   if (plan.rejected.length > 0) {
-    sections.push('', 'These are NOT invoices; record them as not_invoice and do not extract them:', ...plan.rejected.map(describe));
+    sections.push(
+      '',
+      'These are NOT invoices; record them as not_invoice and do not extract them:',
+      ...plan.rejected.map(describe),
+    );
   }
   if (note?.trim()) sections.push('', `My note: ${note.trim()}`);
   return sections.join('\n');
