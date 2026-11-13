@@ -1,7 +1,9 @@
 import {
+  findReusableLink,
   hashPhoneUploadToken,
   isWellFormedPhoneUploadToken,
   newPhoneUploadToken,
+  PHONE_UPLOAD_LINK_MIN_REUSE_MS,
   PHONE_UPLOAD_LINK_TTL_MS,
   PhoneUploadLink,
   PhoneUploadLinkExpiredError,
@@ -10,7 +12,8 @@ import {
 
 const now = new Date('2026-11-12T10:00:00Z');
 const later = (ms: number) => new Date(now.getTime() + ms);
-const newLink = () => PhoneUploadLink.create({ id: 'link-1', userId: 'user_1', tokenHash: 'hash', now });
+const newLink = (id = 'link-1', createdAt = now) =>
+  PhoneUploadLink.create({ id, userId: 'user_1', tokenHash: `hash-${id}`, tokenEnc: `enc-${id}`, now: createdAt });
 
 describe('PhoneUploadLink', () => {
   it('opens for 30 minutes', () => {
@@ -42,6 +45,40 @@ describe('PhoneUploadLink', () => {
 
   it('cannot be used after it expired', () => {
     expect(() => newLink().markUsed('run-1', later(PHONE_UPLOAD_LINK_TTL_MS))).toThrow(PhoneUploadLinkExpiredError);
+  });
+});
+
+describe('reusing an open link', () => {
+  const lastReusableMoment = later(PHONE_UPLOAD_LINK_TTL_MS - PHONE_UPLOAD_LINK_MIN_REUSE_MS);
+
+  it('is allowed while at least 5 minutes of the link are left', () => {
+    expect(newLink().isReusableAt(now)).toBe(true);
+    expect(newLink().isReusableAt(lastReusableMoment)).toBe(true);
+    expect(newLink().isReusableAt(later(PHONE_UPLOAD_LINK_TTL_MS - PHONE_UPLOAD_LINK_MIN_REUSE_MS + 1))).toBe(false);
+  });
+
+  it('is never allowed for used or expired links', () => {
+    const used = newLink();
+    used.markUsed('run-1', now);
+    expect(used.isReusableAt(now)).toBe(false);
+    expect(newLink().isReusableAt(later(PHONE_UPLOAD_LINK_TTL_MS))).toBe(false);
+  });
+
+  it('is never allowed for links whose token was not stored', () => {
+    const legacy = PhoneUploadLink.from({ ...newLink().toState(), tokenEnc: null });
+    expect(legacy.isReusableAt(now)).toBe(false);
+  });
+
+  it('picks the reusable link with the most time left', () => {
+    const older = newLink('older', now).toState();
+    const newer = newLink('newer', later(60_000)).toState();
+    const legacy = { ...newLink('legacy', later(120_000)).toState(), tokenEnc: null };
+    expect(findReusableLink([older, legacy, newer], later(90_000))?.id).toBe('newer');
+  });
+
+  it('finds nothing when every link is too close to its expiry', () => {
+    expect(findReusableLink([newLink().toState()], later(PHONE_UPLOAD_LINK_TTL_MS - 60_000))).toBeNull();
+    expect(findReusableLink([], now)).toBeNull();
   });
 });
 

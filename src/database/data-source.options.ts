@@ -5,6 +5,7 @@ import { AnalysisSchedules1762905600000 } from './migrations/1762905600000-analy
 import { GmailAccounts1762992000000 } from './migrations/1762992000000-gmail-accounts.js';
 import { ImageImports1763078400000 } from './migrations/1763078400000-image-imports.js';
 import { PhoneUploadLinks1763164800000 } from './migrations/1763164800000-phone-upload-links.js';
+import { PhoneUploadLinkReuse1763251200000 } from './migrations/1763251200000-phone-upload-link-reuse.js';
 import { UserEntity } from '../users/entities/user.entity.js';
 import { GmailConnectionEntity } from '../gmail/entities/gmail-connection.entity.js';
 import { AnalysisRunEntity } from '../analysis/entities/analysis-run.entity.js';
@@ -45,6 +46,7 @@ export function buildDataSourceOptions(url: string): DataSourceOptions {
       GmailAccounts1762992000000,
       ImageImports1763078400000,
       PhoneUploadLinks1763164800000,
+      PhoneUploadLinkReuse1763251200000,
     ],
     synchronize: false,
     ssl: requiresSsl(url) ? { rejectUnauthorized: false } : undefined,

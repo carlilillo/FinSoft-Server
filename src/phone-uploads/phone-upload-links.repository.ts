@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { MoreThan, Repository } from 'typeorm';
 import type { PhoneUploadLinkState } from './domain/phone-upload-link.js';
 import { PhoneUploadLinkEntity } from './entities/phone-upload-link.entity.js';
 
@@ -11,8 +11,25 @@ export class PhoneUploadLinksRepository {
     private readonly repo: Repository<PhoneUploadLinkEntity>,
   ) {}
 
-  async insert(link: PhoneUploadLinkState): Promise<void> {
-    await this.repo.insert(link);
+  /**
+   * Shows the user's open link again or creates one, while holding a per-user lock so two quick clicks
+   * can't both create a link. `choose` gets the user's open, unexpired links and returns one of them, or
+   * a new link, which is then inserted.
+   */
+  reuseOrCreate(
+    userId: string,
+    now: Date,
+    choose: (open: PhoneUploadLinkState[]) => PhoneUploadLinkState,
+  ): Promise<PhoneUploadLinkState> {
+    return this.repo.manager.transaction(async (manager) => {
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`phone-upload-links:${userId}`]);
+      const open = await manager.find(PhoneUploadLinkEntity, {
+        where: { userId, status: 'open', expiresAt: MoreThan(now) },
+      });
+      const chosen = choose(open);
+      if (!open.some((link) => link.id === chosen.id)) await manager.insert(PhoneUploadLinkEntity, chosen);
+      return chosen;
+    });
   }
 
   findOwned(userId: string, id: string): Promise<PhoneUploadLinkEntity | null> {

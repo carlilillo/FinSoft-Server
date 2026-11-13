@@ -1,9 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { AnalysisService } from '../analysis/analysis.service.js';
+import { TokenCipherService } from '../common/crypto/token-cipher.service.js';
 import { AppConfigService } from '../config/app-config.service.js';
 import { newId } from '../database/ids.js';
 import type { IncomingFile } from '../imports/domain/import-file.js';
 import {
+  findReusableLink,
   hashPhoneUploadToken,
   isWellFormedPhoneUploadToken,
   newPhoneUploadToken,
@@ -21,19 +23,21 @@ export class PhoneUploadsService {
     private readonly links: PhoneUploadLinksRepository,
     private readonly analysis: AnalysisService,
     private readonly config: AppConfigService,
+    private readonly cipher: TokenCipherService,
   ) {}
 
-  /** A fresh single-use link for the computer to show as a QR code. The token is returned only here. */
-  async create(userId: string): Promise<{ id: string; url: string; expiresAt: Date }> {
-    const token = newPhoneUploadToken();
-    const link = PhoneUploadLink.create({
-      id: newId(),
+  /**
+   * The link for the computer to show as a QR code. While the user has an open link with enough time
+   * left, that same link (same URL, same expiry) is shown again; otherwise a new one is created.
+   */
+  async createOrReuse(userId: string): Promise<{ id: string; url: string; expiresAt: Date }> {
+    const now = new Date();
+    const link = await this.links.reuseOrCreate(
       userId,
-      tokenHash: hashPhoneUploadToken(token),
-      now: new Date(),
-    }).toState();
-    await this.links.insert(link);
-    return { id: link.id, url: this.urlFor(token), expiresAt: link.expiresAt };
+      now,
+      (open) => findReusableLink(open, now) ?? this.newLink(userId, now),
+    );
+    return { id: link.id, url: this.urlFor(this.cipher.decrypt(requireTokenEnc(link))), expiresAt: link.expiresAt };
   }
 
   /** Polled by the computer while the QR code is shown, to follow the phone into the session it starts. */
@@ -74,6 +78,17 @@ export class PhoneUploadsService {
     return { runId: requireRunId(used) };
   }
 
+  private newLink(userId: string, now: Date): PhoneUploadLinkState {
+    const token = newPhoneUploadToken();
+    return PhoneUploadLink.create({
+      id: newId(),
+      userId,
+      tokenHash: hashPhoneUploadToken(token),
+      tokenEnc: this.cipher.encrypt(token),
+      now,
+    }).toState();
+  }
+
   private async findByToken(token: string) {
     if (!isWellFormedPhoneUploadToken(token)) throw linkNotFound();
     const entity = await this.links.findByTokenHash(hashPhoneUploadToken(token));
@@ -88,6 +103,12 @@ export class PhoneUploadsService {
 
 function linkNotFound(): NotFoundException {
   return new NotFoundException('This upload link is not valid. Scan the QR code on your computer again.');
+}
+
+/** Reused links are chosen among those with a stored token, and new ones always have one. */
+function requireTokenEnc(link: PhoneUploadLinkState): string {
+  if (!link.tokenEnc) throw new Error(`Phone upload link ${link.id} has no stored token`);
+  return link.tokenEnc;
 }
 
 function requireRunId(link: PhoneUploadLinkState): string {
