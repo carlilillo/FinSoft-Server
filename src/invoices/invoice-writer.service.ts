@@ -4,7 +4,7 @@ import { DataSource, type EntityManager } from 'typeorm';
 import { newId } from '../database/ids.js';
 import { ProductEntity } from '../products/entities/product.entity.js';
 import { createInvoice, type InvoiceLineDraft, validateInvoiceLines } from './domain/invoice.js';
-import { toCents, toCentsOrNull } from './domain/money.js';
+import { parseAmount, parseAmountOrNull } from './domain/money.js';
 import { normalizeProductKey, normalizeVendorKey } from './domain/normalize.js';
 import { InvoiceLineEntity } from './entities/invoice-line.entity.js';
 import { InvoiceEntity } from './entities/invoice.entity.js';
@@ -32,10 +32,10 @@ export class InvoiceWriterService {
       issueDate: extracted.issueDate,
       dueDate: extracted.dueDate,
       currency: extracted.currency,
-      subtotalCents: toCents(extracted.subtotal, 'subtotal'),
-      vatCents: toCents(extracted.vat, 'vat'),
-      withholdingCents: toCentsOrNull(extracted.withholding, 'withholding'),
-      totalCents: toCents(extracted.total, 'total'),
+      subtotal: parseAmount(extracted.subtotal, 'subtotal'),
+      vat: parseAmount(extracted.vat, 'vat'),
+      withholding: parseAmountOrNull(extracted.withholding, 'withholding'),
+      total: parseAmount(extracted.total, 'total'),
       paymentMethod: extracted.paymentMethod,
       language: extracted.language,
       notes: extracted.notes,
@@ -97,13 +97,13 @@ export class InvoiceWriterService {
           productId: product.id,
           description: line.description,
           quantity: line.quantity,
-          unitPriceNetCents: line.unitPriceNetCents,
-          unitPriceGrossCents: line.unitPriceGrossCents,
+          unitPriceNet: line.unitPriceNet,
+          unitPriceGross: line.unitPriceGross,
           vatRate: line.vatRate,
-          discountCents: line.discountCents,
-          lineNetCents: line.lineNetCents,
-          lineVatCents: line.lineVatCents,
-          lineGrossCents: line.lineGrossCents,
+          discount: line.discount,
+          lineNet: line.lineNet,
+          lineVat: line.lineVat,
+          lineGross: line.lineGross,
           position,
         });
       }
@@ -176,12 +176,12 @@ function toLineDraft(line: ExtractedLine, index: number): InvoiceLineDraft {
     sku: line.sku?.trim() || null,
     unit: line.unit?.trim() || null,
     quantity: line.quantity,
-    unitPriceNetCents: toCents(line.unitPriceNet, field('unitPriceNet')),
-    unitPriceGrossCents: toCentsOrNull(line.unitPriceGross, field('unitPriceGross')),
+    unitPriceNet: parseAmount(line.unitPriceNet, field('unitPriceNet')),
+    unitPriceGross: parseAmountOrNull(line.unitPriceGross, field('unitPriceGross')),
     vatRate: line.vatRate,
-    discountCents: toCentsOrNull(line.discount, field('discount')),
-    lineNetCents: toCents(line.lineNet, field('lineNet')),
-    lineVatCents: toCentsOrNull(line.lineVat, field('lineVat')),
-    lineGrossCents: toCents(line.lineGross, field('lineGross')),
+    discount: parseAmountOrNull(line.discount, field('discount')),
+    lineNet: parseAmount(line.lineNet, field('lineNet')),
+    lineVat: parseAmountOrNull(line.lineVat, field('lineVat')),
+    lineGross: parseAmount(line.lineGross, field('lineGross')),
   };
 }

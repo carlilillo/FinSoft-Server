@@ -28,6 +28,7 @@ report values in the normalized formats required by the tools, never in the docu
 - Decide the convention from the whole document (e.g. a total of "1.210,00" with VAT "210,00" is Spanish style).
 - Tools take amounts as plain decimal strings with "." as decimal separator and no thousands separator:
   "1234.56", "0.29", "-15.00". Never include currency symbols.
+- Copy every printed decimal and never round: usage-billed unit prices can be tiny ("0.00000023148148").
 - Typical Spanish VAT rates: 21 %, 10 %, 4 % (0 % for exempt). UK: 20 %, 5 %. Report rates as numbers (21, not "21%").
 
 ### Dates

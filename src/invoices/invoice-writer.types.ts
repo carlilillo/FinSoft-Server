@@ -1,6 +1,6 @@
 import type { InvoiceLanguage } from './domain/invoice.js';
 
-/** Amounts arrive as decimal strings ("1234.56") exactly as extracted; the writer converts them to cents. */
+/** Amounts arrive as decimal strings ("1234.56") exactly as extracted; the writer validates and stores them as is. */
 export interface ExtractedVendor {
   name: string;
   taxId: string | null;

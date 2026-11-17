@@ -9,6 +9,7 @@ import { AnalysisRun } from '../analysis/domain/analysis-run.js';
 import { AppModule } from '../app.module.js';
 import { newId } from '../database/ids.js';
 import { EmailsRepository } from '../emails/emails.repository.js';
+import { compareAmounts } from '../invoices/domain/money.js';
 import { InvoicesRepository } from '../invoices/invoices.repository.js';
 import { StorageService } from '../storage/storage.service.js';
 import { UsersService } from '../users/users.service.js';
@@ -52,10 +53,10 @@ async function main(): Promise<void> {
         vendor: invoice.vendor?.name,
         number: invoice.invoiceNumber,
         date: invoice.issueDate,
-        net: invoice.subtotalCents,
-        vat: invoice.vatCents,
-        irpf: invoice.withholdingCents,
-        total: invoice.totalCents,
+        net: invoice.subtotal,
+        vat: invoice.vat,
+        irpf: invoice.withholding,
+        total: invoice.total,
         currency: invoice.currency,
         lines: invoice.lines?.length,
         taxId: invoice.vendor?.taxId,
@@ -66,11 +67,11 @@ async function main(): Promise<void> {
     const spanish = invoices.find((invoice) => invoice.currency === 'EUR');
     const english = invoices.find((invoice) => invoice.currency === 'GBP');
     expect(failures, invoices.length === 2, `expected 2 invoices, got ${invoices.length}`);
-    expect(failures, spanish?.totalCents === 10600, 'Spanish total should be 10600 cents');
-    expect(failures, spanish?.withholdingCents === 1500, 'Spanish IRPF should be 1500 cents');
+    expect(failures, isAmount(spanish?.total, '106.00'), 'Spanish total should be 106.00');
+    expect(failures, isAmount(spanish?.withholding, '15.00'), 'Spanish IRPF should be 15.00');
     expect(failures, spanish?.vendor?.phone === null, 'Spanish vendor phone is not on the document and must be null');
     expect(failures, spanish?.runId === runId, 'run_id must equal the thread id');
-    expect(failures, english?.totalCents === 1200, 'English total should be 1200 cents');
+    expect(failures, isAmount(english?.total, '12.00'), 'English total should be 12.00');
     expect(failures, triage.filter((email) => email.triage === 'not_invoice').length === 2, 'newsletter and shipping must be not_invoice');
 
     const followUp = await runner.run({
@@ -92,6 +93,10 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   console.log('\n✓ Agent smoke test passed');
+}
+
+function isAmount(actual: string | null | undefined, expected: string): boolean {
+  return actual !== null && actual !== undefined && compareAmounts(actual, expected) === 0;
 }
 
 function expect(failures: string[], condition: boolean, message: string): void {

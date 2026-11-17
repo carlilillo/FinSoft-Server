@@ -1,38 +1,35 @@
+import { type Amount, compareAmounts, sumAmounts } from '../../invoices/domain/money.js';
+
 export interface SessionInvoice {
   currency: string;
-  subtotalCents: number;
-  vatCents: number;
-  withholdingCents: number | null;
-  totalCents: number;
+  subtotal: Amount;
+  vat: Amount;
+  withholding: Amount | null;
+  total: Amount;
 }
 
 export interface CurrencyTotals {
   currency: string;
   invoiceCount: number;
-  netCents: number;
-  vatCents: number;
-  withholdingCents: number;
-  grossCents: number;
+  net: Amount;
+  vat: Amount;
+  withholding: Amount;
+  gross: Amount;
 }
 
 /** Expense totals of one extraction session, per currency (never summed across currencies). */
 export function summarizeSession(invoices: SessionInvoice[]): CurrencyTotals[] {
-  const totals = new Map<string, CurrencyTotals>();
+  const byCurrency = new Map<string, SessionInvoice[]>();
   for (const invoice of invoices) {
-    const entry = totals.get(invoice.currency) ?? {
-      currency: invoice.currency,
-      invoiceCount: 0,
-      netCents: 0,
-      vatCents: 0,
-      withholdingCents: 0,
-      grossCents: 0,
-    };
-    entry.invoiceCount += 1;
-    entry.netCents += invoice.subtotalCents;
-    entry.vatCents += invoice.vatCents;
-    entry.withholdingCents += invoice.withholdingCents ?? 0;
-    entry.grossCents += invoice.totalCents;
-    totals.set(invoice.currency, entry);
+    byCurrency.set(invoice.currency, [...(byCurrency.get(invoice.currency) ?? []), invoice]);
   }
-  return [...totals.values()].sort((a, b) => b.grossCents - a.grossCents);
+  const totals = [...byCurrency].map(([currency, group]): CurrencyTotals => ({
+    currency,
+    invoiceCount: group.length,
+    net: sumAmounts(group.map((invoice) => invoice.subtotal)),
+    vat: sumAmounts(group.map((invoice) => invoice.vat)),
+    withholding: sumAmounts(group.map((invoice) => invoice.withholding)),
+    gross: sumAmounts(group.map((invoice) => invoice.total)),
+  }));
+  return totals.sort((a, b) => compareAmounts(b.gross, a.gross));
 }

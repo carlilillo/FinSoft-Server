@@ -1,4 +1,6 @@
+import Big from 'big.js';
 import { InvalidInvoiceError, InvoiceTotalsMismatchError } from './invoice.errors.js';
+import { type Amount, decimalPlaces, minorUnits, sumAmounts } from './money.js';
 
 export type InvoiceLanguage = 'en' | 'es' | 'other';
 
@@ -7,10 +9,10 @@ export interface InvoiceDraft {
   issueDate: string;
   dueDate: string | null;
   currency: string;
-  subtotalCents: number;
-  vatCents: number;
-  withholdingCents: number | null;
-  totalCents: number;
+  subtotal: Amount;
+  vat: Amount;
+  withholding: Amount | null;
+  total: Amount;
   paymentMethod: string | null;
   language: InvoiceLanguage;
   notes: string | null;
@@ -21,24 +23,27 @@ export interface InvoiceLineDraft {
   sku: string | null;
   unit: string | null;
   quantity: number;
-  unitPriceNetCents: number;
-  unitPriceGrossCents: number | null;
+  /** Exactly as printed, with every decimal (usage rates such as "0.00000023148148" included). */
+  unitPriceNet: Amount;
+  unitPriceGross: Amount | null;
   vatRate: number | null;
-  discountCents: number | null;
-  lineNetCents: number;
-  lineVatCents: number | null;
-  lineGrossCents: number;
+  discount: Amount | null;
+  lineNet: Amount;
+  lineVat: Amount | null;
+  lineGross: Amount;
 }
 
 export interface InvoiceTotals {
-  subtotalCents: number;
-  vatCents: number;
-  totalCents: number;
+  currency: string;
+  subtotal: Amount;
+  vat: Amount;
+  total: Amount;
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const CURRENCY = /^[A-Z]{3}$/;
-const TOTALS_TOLERANCE_CENTS = 2;
+/** Rounding slack, in the currency's smallest unit (cents for EUR/USD, yen for JPY). */
+const TOTALS_TOLERANCE_UNITS = 2;
 
 /** Validates an extracted invoice header and returns the normalized draft. */
 export function createInvoice(draft: InvoiceDraft): InvoiceDraft {
@@ -54,12 +59,12 @@ export function createInvoice(draft: InvoiceDraft): InvoiceDraft {
     throw new InvalidInvoiceError(`currency must be an ISO 4217 code such as EUR or USD, got "${draft.currency}"`);
   }
 
-  const withholding = draft.withholdingCents ?? 0;
-  const expectedTotal = draft.subtotalCents + draft.vatCents - withholding;
-  if (Math.abs(expectedTotal - draft.totalCents) > TOTALS_TOLERANCE_CENTS) {
+  const withholding = draft.withholding ?? '0';
+  const expectedTotal = new Big(draft.subtotal).plus(draft.vat).minus(withholding);
+  if (expectedTotal.minus(draft.total).abs().gt(minorUnits(currency, TOTALS_TOLERANCE_UNITS))) {
     throw new InvoiceTotalsMismatchError(
-      `subtotal (${draft.subtotalCents}) + VAT (${draft.vatCents}) - withholding (${withholding}) = ${expectedTotal} cents, ` +
-        `but total is ${draft.totalCents} cents. Re-read the totals block: include any surcharge (recargo de equivalencia) in VAT ` +
+      `subtotal (${draft.subtotal}) + VAT (${draft.vat}) - withholding (${withholding}) = ${expectedTotal.toFixed()}, ` +
+        `but total is ${draft.total}. Re-read the totals block: include any surcharge (recargo de equivalencia) in VAT ` +
         'and report IRPF as withholding.',
     );
   }
@@ -71,20 +76,20 @@ export function createInvoice(draft: InvoiceDraft): InvoiceDraft {
 export function validateInvoiceLines(totals: InvoiceTotals, lines: InvoiceLineDraft[]): InvoiceLineDraft[] {
   if (lines.length === 0) throw new InvalidInvoiceError('An invoice needs at least one line item');
 
-  lines.forEach((line, index) => validateLine(line, index));
+  lines.forEach((line, index) => validateLine(line, index, totals.currency));
 
-  const linesNet = lines.reduce((sum, line) => sum + line.lineNetCents, 0);
-  const tolerance = Math.max(TOTALS_TOLERANCE_CENTS, lines.length);
-  if (Math.abs(linesNet - totals.subtotalCents) > tolerance) {
+  const linesNet = sumAmounts(lines.map((line) => line.lineNet));
+  const tolerance = minorUnits(totals.currency, Math.max(TOTALS_TOLERANCE_UNITS, lines.length));
+  if (new Big(linesNet).minus(totals.subtotal).abs().gt(tolerance)) {
     throw new InvoiceTotalsMismatchError(
-      `Line net amounts add up to ${linesNet} cents but the invoice subtotal is ${totals.subtotalCents} cents. ` +
+      `Line net amounts add up to ${linesNet} but the invoice subtotal is ${totals.subtotal}. ` +
         'Add missing lines (shipping, fees) or a negative line for a global discount.',
     );
   }
   return lines.map((line) => ({ ...line, description: line.description.trim() }));
 }
 
-function validateLine(line: InvoiceLineDraft, index: number): void {
+function validateLine(line: InvoiceLineDraft, index: number, currency: string): void {
   const label = `Line ${index + 1} ("${line.description}")`;
   if (!line.description.trim()) throw new InvalidInvoiceError(`Line ${index + 1} has an empty description`);
   if (!Number.isFinite(line.quantity) || line.quantity <= 0) {
@@ -94,17 +99,38 @@ function validateLine(line: InvoiceLineDraft, index: number): void {
     throw new InvalidInvoiceError(`${label}: vatRate must be a percentage between 0 and 100`);
   }
 
-  const expectedNet = Math.round(line.quantity * line.unitPriceNetCents) - (line.discountCents ?? 0);
-  const netTolerance = Math.ceil(Math.abs(line.quantity) * 0.5) + 1;
-  if (Math.abs(expectedNet - line.lineNetCents) > netTolerance) {
+  // A rounded tiny rate ("0.00" for 0.00000023148148/MB-min) still fits the line within its own precision,
+  // so this is the one rounding the arithmetic below cannot catch on its own.
+  if (
+    new Big(line.unitPriceNet).eq(0) &&
+    line.discount === null &&
+    new Big(line.lineNet).abs().gt(minorUnits(currency, 1))
+  ) {
     throw new InvoiceTotalsMismatchError(
-      `${label}: quantity × unit net price - discount = ${expectedNet} cents, but line net is ${line.lineNetCents} cents`,
+      `${label}: unit net price is 0 but line net is ${line.lineNet}. ` +
+        'Copy the unit price with all its printed decimals (e.g. "0.00000023148148"); never round it.',
     );
   }
 
-  if (line.lineVatCents !== null && Math.abs(line.lineNetCents + line.lineVatCents - line.lineGrossCents) > 1) {
+  const quantity = new Big(line.quantity);
+  const expectedNet = quantity.times(line.unitPriceNet).minus(line.discount ?? '0');
+  // The printed unit price is itself rounded to its last decimal: allow that error on every unit, plus one
+  // minor unit for rounding the line. A precise rate (0.00000023148148) keeps the check tight on huge quantities.
+  const unitPriceRounding = new Big(`5e-${decimalPlaces(line.unitPriceNet) + 1}`);
+  const netTolerance = quantity.abs().times(unitPriceRounding).plus(minorUnits(currency, 1));
+  if (expectedNet.minus(line.lineNet).abs().gt(netTolerance)) {
     throw new InvoiceTotalsMismatchError(
-      `${label}: line net (${line.lineNetCents}) + line VAT (${line.lineVatCents}) must equal line gross (${line.lineGrossCents})`,
+      `${label}: quantity × unit net price - discount = ${expectedNet.toFixed()}, but line net is ${line.lineNet}. ` +
+        'Copy the unit price with all its printed decimals.',
+    );
+  }
+
+  if (
+    line.lineVat !== null &&
+    new Big(line.lineNet).plus(line.lineVat).minus(line.lineGross).abs().gt(minorUnits(currency, 1))
+  ) {
+    throw new InvoiceTotalsMismatchError(
+      `${label}: line net (${line.lineNet}) + line VAT (${line.lineVat}) must equal line gross (${line.lineGross})`,
     );
   }
 }

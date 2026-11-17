@@ -9,7 +9,8 @@ import {
   PrimaryColumn,
   type Relation,
 } from 'typeorm';
-import { bigintToNumber, CLERK_USER_ID_COLUMN, ULID_COLUMN } from '../../database/column-types.js';
+import { CLERK_USER_ID_COLUMN, ULID_COLUMN } from '../../database/column-types.js';
+import type { Amount } from '../domain/money.js';
 import { InvoiceLineEntity } from './invoice-line.entity.js';
 import { VendorEntity } from './vendor.entity.js';
 import type { InvoiceLanguage } from '../domain/invoice.js';
@@ -66,26 +67,18 @@ export class InvoiceEntity {
   @Column({ type: 'char', length: 3 })
   currency: string;
 
-  @Column({
-    name: 'subtotal_cents',
-    type: 'bigint',
-    transformer: bigintToNumber,
-  })
-  subtotalCents: number;
+  /** Money columns are exact `numeric`; pg returns them as decimal strings, never floats. */
+  @Column({ type: 'numeric' })
+  subtotal: Amount;
 
-  @Column({ name: 'vat_cents', type: 'bigint', transformer: bigintToNumber })
-  vatCents: number;
+  @Column({ type: 'numeric' })
+  vat: Amount;
 
-  @Column({
-    name: 'withholding_cents',
-    type: 'bigint',
-    nullable: true,
-    transformer: bigintToNumber,
-  })
-  withholdingCents: number | null;
+  @Column({ type: 'numeric', nullable: true })
+  withholding: Amount | null;
 
-  @Column({ name: 'total_cents', type: 'bigint', transformer: bigintToNumber })
-  totalCents: number;
+  @Column({ type: 'numeric' })
+  total: Amount;
 
   @Column({
     name: 'payment_method',

@@ -46,8 +46,12 @@ export const saveInvoiceProductsSchema = z.object({
         sku: nullableText('SKU / reference / código, or null'),
         unit: nullableText('Unit of measure (kg, h, ud, month…), or null'),
         quantity: z.number().positive(),
-        unitPriceNet: decimal.describe('Unit price without VAT'),
-        unitPriceGross: decimal.nullable().describe('Unit price with VAT, or null if not printed'),
+        unitPriceNet: decimal.describe(
+          'Unit price without VAT, copied with ALL its printed decimals; never round (usage rates like "0.00000023148148")',
+        ),
+        unitPriceGross: decimal
+          .nullable()
+          .describe('Unit price with VAT, with all its printed decimals, or null if not printed'),
         vatRate: z.number().min(0).max(100).nullable().describe('VAT percentage, e.g. 21, or null'),
         discount: decimal.nullable().describe('Discount amount on this line, or null'),
         lineNet: decimal.describe('Line amount without VAT'),

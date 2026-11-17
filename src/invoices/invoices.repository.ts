@@ -74,10 +74,10 @@ export class InvoicesRepository {
       .then((rows) => rows.map((row) => row.id));
   }
 
-  findForSpend(userId: string, from: string, to: string): Promise<Array<Pick<InvoiceEntity, 'issueDate' | 'currency' | 'totalCents'>>> {
+  findForSpend(userId: string, from: string, to: string): Promise<Array<Pick<InvoiceEntity, 'issueDate' | 'currency' | 'total'>>> {
     return this.repo
       .createQueryBuilder('invoice')
-      .select(['invoice.issueDate', 'invoice.currency', 'invoice.totalCents'])
+      .select(['invoice.issueDate', 'invoice.currency', 'invoice.total'])
       .where('invoice.userId = :userId', { userId })
       .andWhere('invoice.issueDate BETWEEN :from AND :to', { from, to })
       .getMany();

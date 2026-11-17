@@ -1,3 +1,5 @@
+import { type Amount, compareAmounts, sumAmounts } from '../../invoices/domain/money.js';
+
 export type SpendRange = '7d' | '14d' | '30d';
 
 export const SPEND_RANGE_DAYS: Record<SpendRange, number> = { '7d': 7, '14d': 14, '30d': 30 };
@@ -5,18 +7,18 @@ export const SPEND_RANGE_DAYS: Record<SpendRange, number> = { '7d': 7, '14d': 14
 export interface SpendInvoice {
   issueDate: string;
   currency: string;
-  totalCents: number;
+  total: Amount;
 }
 
 export interface SpendDay {
   date: string;
-  totalCents: number;
+  total: Amount;
 }
 
 export interface CurrencySpend {
   currency: string;
-  totalCents: number;
-  previousTotalCents: number;
+  total: Amount;
+  previousTotal: Amount;
   invoiceCount: number;
   days: SpendDay[];
 }
@@ -50,26 +52,26 @@ export function computeSpendSeries(invoices: SpendInvoice[], range: SpendRange, 
     byCurrency.set(invoice.currency, entry);
 
     if (invoice.issueDate < from) {
-      entry.previousTotalCents += invoice.totalCents;
+      entry.previousTotal = sumAmounts([entry.previousTotal, invoice.total]);
       continue;
     }
     const day = entry.days.find((bucket) => bucket.date === invoice.issueDate);
-    if (day) day.totalCents += invoice.totalCents;
-    entry.totalCents += invoice.totalCents;
+    if (day) day.total = sumAmounts([day.total, invoice.total]);
+    entry.total = sumAmounts([entry.total, invoice.total]);
     entry.invoiceCount += 1;
   }
 
-  const currencies = [...byCurrency.values()].sort((a, b) => b.totalCents - a.totalCents);
+  const currencies = [...byCurrency.values()].sort((a, b) => compareAmounts(b.total, a.total));
   return { range, from, to, currencies };
 }
 
 function createCurrencySpend(currency: string, dates: string[]): CurrencySpend {
   return {
     currency,
-    totalCents: 0,
-    previousTotalCents: 0,
+    total: '0',
+    previousTotal: '0',
     invoiceCount: 0,
-    days: dates.map((date) => ({ date, totalCents: 0 })),
+    days: dates.map((date) => ({ date, total: '0' })),
   };
 }
 
