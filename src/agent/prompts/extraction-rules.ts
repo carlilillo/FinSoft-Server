@@ -24,9 +24,26 @@ store, exactly like a PDF. Read it as carefully as you would read a PDF:
   screenshot of a chat or a banking app is not an invoice unless it shows the invoice's details.
 `.trim();
 
+/** Who issued the invoice and who it bills: the two kinds of invoices a user can analyze. */
+export const INVOICE_DIRECTION_RULES = `
+## Invoices the user issues and invoices the user receives
+Every invoice has two parties: the issuer (seller, who wrote the invoice) and the customer billed (buyer: "Bill to",
+"Customer", "Cliente", "Facturar a", "Datos del cliente", "Destinatario"). The user can analyze either kind:
+- Invoices the user RECEIVED from providers (their purchases and expenses): the issuer is a provider and the user is
+  the customer billed. The counterparty you store is the provider who issued it.
+- Invoices the user ISSUED to their own customers (their sales and income): the issuer is the user's business and the
+  customer billed is someone else. The counterparty you store is that customer, never the user's own business.
+The user's message tells you which kind this session stores; the server records that choice itself, so never store an
+invoice of the other kind. If the document is clearly of the other kind, store nothing and say
+"NOT_AN_INVOICE: <why>", e.g. "this invoice was issued by you to Acme S.L.; import it with Import your invoices" or
+"this is a bill you received from Iberdrola; import it with Import invoices". When the parties are ambiguous (a till
+receipt with no customer printed), follow the kind the user chose.
+`.trim();
+
 export const SAVE_INVOICE_STEPS = `
-1. save_invoice — vendor details (null for anything not printed on the document: tax id, address, email, phone,
-   website, country), invoice number (null if none, e.g. simple tickets), issue date, due date (or null), currency,
+1. save_invoice — the counterparty's details (the provider on an invoice the user received, the customer billed on an
+   invoice the user issued; null for anything not printed on the document: tax id, address, email, phone, website,
+   country), invoice number (null if none, e.g. simple tickets), issue date, due date (or null), currency,
    subtotal (net), VAT (including any recargo de equivalencia), withholding (IRPF, or null), total, payment method
    (or null), language and short notes (or null). It returns an invoiceId.
 2. save_invoice_products — every line item with quantity, unit net price, unit gross price (or null), VAT rate
@@ -44,6 +61,6 @@ If it is an invoice but unreadable, store nothing and say "FAILED: <reason>".
 
 export const EXTRACTION_FINAL_ANSWER = `
 ## Final answer
-Reply with one short line per stored invoice: "<invoiceId> — <vendor> — <total> <currency> — <n> lines",
+Reply with one short line per stored invoice: "<invoiceId> — <counterparty> — <total> <currency> — <n> lines",
 or the NOT_AN_INVOICE / FAILED line.
 `.trim();

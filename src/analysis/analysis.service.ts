@@ -11,6 +11,7 @@ import { assertImportable, importFileName, type IncomingFile } from '../imports/
 import type { ImportFileEntity } from '../imports/entities/import-file.entity.js';
 import { ImportFilesRepository } from '../imports/import-files.repository.js';
 import { toInvoiceSummaryView } from '../invoices/dto/invoice.views.js';
+import type { InvoiceDirection } from '../invoices/domain/invoice-direction.js';
 import type { InvoiceEntity } from '../invoices/entities/invoice.entity.js';
 import { InvoicesRepository } from '../invoices/invoices.repository.js';
 import { JobQueueService } from '../jobs/job-queue.service.js';
@@ -63,10 +64,14 @@ export class AnalysisService {
 
   /**
    * Manual import: a new extraction session fed by the user's invoice files (PDFs or images) instead of
-   * their inbox. Each file is written, byte for byte, to the workspace of its own thread; the worker then
-   * extracts them as one batch.
+   * their inbox, either invoices they issued to customers or invoices they received from providers. Each file is
+   * written, byte for byte, to the workspace of its own thread; the worker then extracts them as one batch.
    */
-  async importDocuments(userId: string, incoming: IncomingFile[]): Promise<{ runId: string }> {
+  async importDocuments(
+    userId: string,
+    incoming: IncomingFile[],
+    direction: InvoiceDirection,
+  ): Promise<{ runId: string }> {
     const files = assertImportable(incoming);
     const runId = newId();
     const run = await this.runs.saveExclusive(userId, (active) =>
@@ -75,6 +80,7 @@ export class AnalysisService {
         userId,
         active,
         documentsTotal: files.length,
+        direction,
       }).toState(),
     );
 
@@ -144,6 +150,7 @@ export class AnalysisService {
     return runs.map((run) => ({
       id: run.id,
       source: run.source,
+      invoiceDirection: run.invoiceDirection,
       status: run.status,
       emailsTotal: run.emailsTotal,
       documentsTotal: run.documentsTotal,
@@ -170,6 +177,7 @@ export class AnalysisService {
     const base = {
       id: run.id,
       source: run.source,
+      invoiceDirection: run.invoiceDirection,
       status: run.status,
       stageDetail: run.stageDetail,
       error: run.error,

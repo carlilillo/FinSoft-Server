@@ -1,7 +1,10 @@
 import type { InvoiceLanguage } from './domain/invoice.js';
 
-/** Amounts arrive as decimal strings ("1234.56") exactly as extracted; the writer validates and stores them as is. */
-export interface ExtractedVendor {
+/**
+ * The other company on the invoice (stored as a vendor): the provider on an invoice the user received, the customer
+ * billed on an invoice the user issued.
+ */
+export interface ExtractedCounterparty {
   name: string;
   taxId: string | null;
   address: string | null;
@@ -11,8 +14,9 @@ export interface ExtractedVendor {
   country: string | null;
 }
 
+/** Amounts arrive as decimal strings ("1234.56") exactly as extracted; the writer validates and stores them as is. */
 export interface ExtractedInvoice {
-  vendor: ExtractedVendor;
+  counterparty: ExtractedCounterparty;
   invoiceNumber: string | null;
   issueDate: string;
   dueDate: string | null;

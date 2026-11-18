@@ -1,8 +1,14 @@
 import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { HumanMessage } from 'langchain';
 import { settleWithConcurrency } from '../common/async/settle-with-concurrency.js';
+import type { InvoiceDirection } from '../invoices/domain/invoice-direction.js';
 import { mapAgentChunk, type RootAgentName } from './domain/agent-events.js';
-import { type DocumentExtractorAgent, type InvoiceAgent, InvoiceAgentFactory } from './invoice-agent.factory.js';
+import {
+  type AgentContext,
+  type DocumentExtractorAgent,
+  type InvoiceAgent,
+  InvoiceAgentFactory,
+} from './invoice-agent.factory.js';
 import { DOCUMENT_EXTRACTOR_AGENT_NAME } from './prompts/document-extractor.prompt.js';
 import { TRIAGE_AGENT_NAME } from './prompts/triage.prompt.js';
 
@@ -14,6 +20,9 @@ export interface AgentInvocation {
   message: string | null;
 }
 
+/** An inbox analysis only ever stores invoices the user received from providers. */
+const INBOX_DIRECTION: InvoiceDirection = 'received';
+
 /** One element of an import batch: one imported document (PDF or image) on its own thread. */
 export interface DocumentInvocation {
   userId: string;
@@ -23,6 +32,8 @@ export interface DocumentInvocation {
   threadId: string;
   /** null resumes the thread from its last checkpoint (retry after a crash). */
   message: string | null;
+  /** The kind of invoices the user imported: issued by them, or received from providers. */
+  direction: InvoiceDirection;
 }
 
 const RECURSION_LIMIT = 500;
@@ -48,7 +59,13 @@ export class AgentRunnerService implements OnModuleInit {
 
   /** Inbox analysis (triage + extraction subagents) on the run's thread. Returns the coordinator's summary. */
   run(invocation: AgentInvocation, signal?: AbortSignal): Promise<string> {
-    return this.execute(this.inboxAgent, TRIAGE_AGENT_NAME, invocation, { runId: invocation.threadId }, signal);
+    return this.execute(
+      this.inboxAgent,
+      TRIAGE_AGENT_NAME,
+      invocation,
+      { runId: invocation.threadId, direction: INBOX_DIRECTION },
+      signal,
+    );
   }
 
   /**
@@ -63,6 +80,7 @@ export class AgentRunnerService implements OnModuleInit {
     return settleWithConcurrency(invocations, maxConcurrency, (invocation) =>
       this.execute(this.documentAgent as unknown as StreamableAgent, DOCUMENT_EXTRACTOR_AGENT_NAME, invocation, {
         runId: invocation.runId,
+        direction: invocation.direction,
       }),
     );
   }
@@ -71,13 +89,13 @@ export class AgentRunnerService implements OnModuleInit {
     agent: StreamableAgent,
     agentName: RootAgentName,
     invocation: AgentInvocation,
-    scope: { runId: string },
+    scope: { runId: string; direction: InvoiceDirection },
     signal?: AbortSignal,
   ): Promise<string> {
     const { userId, threadId } = invocation;
     const input = invocation.message === null ? null : { messages: [new HumanMessage(invocation.message)] };
     const startedAt = Date.now();
-    const logContext = { runId: scope.runId, threadId, userId };
+    const logContext = { runId: scope.runId, threadId, userId, direction: scope.direction };
     this.logger.log({
       ...logContext,
       agent: agentName,
@@ -90,8 +108,9 @@ export class AgentRunnerService implements OnModuleInit {
         thread_id: threadId,
         user_id: userId,
         run_id: scope.runId,
+        invoice_direction: scope.direction,
       },
-      context: { userId },
+      context: { userId, direction: scope.direction } satisfies AgentContext,
       streamMode: ['updates', 'custom'],
       subgraphs: true,
       recursionLimit: RECURSION_LIMIT,

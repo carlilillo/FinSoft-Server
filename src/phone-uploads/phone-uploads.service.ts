@@ -4,6 +4,7 @@ import { TokenCipherService } from '../common/crypto/token-cipher.service.js';
 import { AppConfigService } from '../config/app-config.service.js';
 import { newId } from '../database/ids.js';
 import type { IncomingFile } from '../imports/domain/import-file.js';
+import type { InvoiceDirection } from '../invoices/domain/invoice-direction.js';
 import {
   findReusableLink,
   hashPhoneUploadToken,
@@ -27,15 +28,19 @@ export class PhoneUploadsService {
   ) {}
 
   /**
-   * The link for the computer to show as a QR code. While the user has an open link with enough time
-   * left, that same link (same URL, same expiry) is shown again; otherwise a new one is created.
+   * The link for the computer to show as a QR code, for one kind of invoices (issued by the user, or received from
+   * providers). While the user has an open link for that kind with enough time left, that same link (same URL, same
+   * expiry) is shown again; otherwise a new one is created.
    */
-  async createOrReuse(userId: string): Promise<{ id: string; url: string; expiresAt: Date }> {
+  async createOrReuse(
+    userId: string,
+    direction: InvoiceDirection,
+  ): Promise<{ id: string; url: string; expiresAt: Date }> {
     const now = new Date();
     const link = await this.links.reuseOrCreate(
       userId,
       now,
-      (open) => findReusableLink(open, now) ?? this.newLink(userId, now),
+      (open) => findReusableLink(open, now, direction) ?? this.newLink(userId, direction, now),
     );
     return { id: link.id, url: this.urlFor(this.cipher.decrypt(requireTokenEnc(link))), expiresAt: link.expiresAt };
   }
@@ -52,11 +57,11 @@ export class PhoneUploadsService {
     };
   }
 
-  /** The phone opened the link: it may pick invoices only while the link is open. */
-  async describe(token: string): Promise<{ expiresAt: Date }> {
+  /** The phone opened the link: it may pick invoices only while the link is open, and learns which kind it sends. */
+  async describe(token: string): Promise<{ expiresAt: Date; direction: InvoiceDirection }> {
     const entity = await this.findByToken(token);
     PhoneUploadLink.from(entity).assertOpen(new Date());
-    return { expiresAt: entity.expiresAt };
+    return { expiresAt: entity.expiresAt, direction: entity.invoiceDirection };
   }
 
   /**
@@ -71,20 +76,21 @@ export class PhoneUploadsService {
       const link = PhoneUploadLink.from(entity);
       const now = new Date();
       link.assertOpen(now);
-      const { runId } = await this.analysis.importDocuments(entity.userId, files);
+      const { runId } = await this.analysis.importDocuments(entity.userId, files, entity.invoiceDirection);
       link.markUsed(runId, now);
       return link.toState();
     });
     return { runId: requireRunId(used) };
   }
 
-  private newLink(userId: string, now: Date): PhoneUploadLinkState {
+  private newLink(userId: string, direction: InvoiceDirection, now: Date): PhoneUploadLinkState {
     const token = newPhoneUploadToken();
     return PhoneUploadLink.create({
       id: newId(),
       userId,
       tokenHash: hashPhoneUploadToken(token),
       tokenEnc: this.cipher.encrypt(token),
+      direction,
       now,
     }).toState();
   }

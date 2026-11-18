@@ -4,21 +4,31 @@ import { DataSource, type EntityManager } from 'typeorm';
 import { newId } from '../database/ids.js';
 import { ProductEntity } from '../products/entities/product.entity.js';
 import { createInvoice, type InvoiceLineDraft, validateInvoiceLines } from './domain/invoice.js';
+import type { InvoiceDirection } from './domain/invoice-direction.js';
 import { parseAmount, parseAmountOrNull } from './domain/money.js';
 import { normalizeProductKey, normalizeVendorKey } from './domain/normalize.js';
 import { InvoiceLineEntity } from './entities/invoice-line.entity.js';
 import { InvoiceEntity } from './entities/invoice.entity.js';
 import { VendorEntity } from './entities/vendor.entity.js';
-import type { ExtractedInvoice, ExtractedLine, ExtractedVendor, SavedInvoice } from './invoice-writer.types.js';
+import type { ExtractedCounterparty, ExtractedInvoice, ExtractedLine, SavedInvoice } from './invoice-writer.types.js';
 
 export interface InvoiceProvenance {
   userId: string;
+  /** Which kind of invoices the session stores (issued by the user or received from providers): never the model's call. */
+  direction: InvoiceDirection;
   runId: string | null;
   emailId: string | null;
   /** The Gmail account that email arrived in; null when the invoice did not come from an inbox. */
   gmailConnectionId: string | null;
   /** The imported document (PDF or image) the invoice was read from, when it did not come from an email. */
   importFileId: string | null;
+}
+
+/** Whose product a line is: the user's, bought from or sold to one company. */
+interface ProductOwner {
+  userId: string;
+  direction: InvoiceDirection;
+  vendorId: string;
 }
 
 /** Write side used by the extraction agents. Idempotent so re-running a thread never duplicates data. */
@@ -28,6 +38,7 @@ export class InvoiceWriterService {
 
   async saveInvoice(provenance: InvoiceProvenance, extracted: ExtractedInvoice): Promise<SavedInvoice> {
     const draft = createInvoice({
+      direction: provenance.direction,
       invoiceNumber: extracted.invoiceNumber,
       issueDate: extracted.issueDate,
       dueDate: extracted.dueDate,
@@ -42,11 +53,12 @@ export class InvoiceWriterService {
     });
 
     return this.dataSource.transaction(async (manager) => {
-      const vendor = await this.upsertVendor(manager, provenance.userId, extracted.vendor);
+      const vendor = await this.upsertVendor(manager, provenance.userId, extracted.counterparty);
       const existing = draft.invoiceNumber
         ? await manager.findOne(InvoiceEntity, {
             where: {
               userId: provenance.userId,
+              direction: draft.direction,
               vendorId: vendor.id,
               invoiceNumber: draft.invoiceNumber,
             },
@@ -68,7 +80,10 @@ export class InvoiceWriterService {
     });
   }
 
-  /** Replaces the invoice's lines; products are upserted per vendor so price history accumulates. */
+  /**
+   * Replaces the invoice's lines; products are upserted per vendor and direction so price history accumulates, and
+   * what the user sells to a customer never mixes with what the user buys from it.
+   */
   async saveLines(
     userId: string,
     invoiceId: string,
@@ -89,7 +104,11 @@ export class InvoiceWriterService {
       await manager.delete(InvoiceLineEntity, { invoiceId });
       const productIds: string[] = [];
       for (const [position, line] of lines.entries()) {
-        const product = await this.upsertProduct(manager, userId, invoice.vendorId, line);
+        const product = await this.upsertProduct(
+          manager,
+          { userId, direction: invoice.direction, vendorId: invoice.vendorId },
+          line,
+        );
         productIds.push(product.id);
         await manager.insert(InvoiceLineEntity, {
           id: newId(),
@@ -115,7 +134,11 @@ export class InvoiceWriterService {
     });
   }
 
-  private async upsertVendor(manager: EntityManager, userId: string, vendor: ExtractedVendor): Promise<VendorEntity> {
+  private async upsertVendor(
+    manager: EntityManager,
+    userId: string,
+    vendor: ExtractedCounterparty,
+  ): Promise<VendorEntity> {
     const normalizedKey = normalizeVendorKey(vendor.name, vendor.taxId);
     const existing = await manager.findOne(VendorEntity, {
       where: { userId, normalizedKey },
@@ -138,13 +161,12 @@ export class InvoiceWriterService {
 
   private async upsertProduct(
     manager: EntityManager,
-    userId: string,
-    vendorId: string,
+    owner: ProductOwner,
     line: InvoiceLineDraft,
   ): Promise<ProductEntity> {
     const normalizedKey = normalizeProductKey(line.description, line.sku);
     const existing = await manager.findOne(ProductEntity, {
-      where: { userId, vendorId, normalizedKey },
+      where: { ...owner, normalizedKey },
     });
     if (existing) {
       if ((!existing.sku && line.sku) || (!existing.unit && line.unit)) {
@@ -158,8 +180,7 @@ export class InvoiceWriterService {
     }
     const product = manager.create(ProductEntity, {
       id: newId(),
-      userId,
-      vendorId,
+      ...owner,
       normalizedKey,
       displayName: line.description,
       sku: line.sku,

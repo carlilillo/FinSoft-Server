@@ -35,14 +35,20 @@ async function main(): Promise<void> {
     run.beginIngestion();
     await runs.save(run.toState());
 
-    const emails = await app
-      .get(AnalysisIngestionService)
-      .ingestRaw(userId, runId, buildFixtureEmails().map((fixture) => ({ gmailConnectionId: null, gmailMessageId: fixture.id, raw: fixture.raw })));
+    const emails = await app.get(AnalysisIngestionService).ingestRaw(
+      userId,
+      runId,
+      buildFixtureEmails().map((fixture) => ({
+        gmailConnectionId: null,
+        gmailMessageId: fixture.id,
+        raw: fixture.raw,
+      })),
+    );
     run.beginExtraction(emails.length);
     await runs.save(run.toState());
 
     const runner = app.get(AgentRunnerService);
-    const summary = await runner.run({ userId, threadId: runId, message: buildStartMessage(emails) });
+    const summary = await runner.run({ userId, threadId: runId, message: buildStartMessage(emails, []) });
     console.log('\nAgent summary:\n', summary);
 
     const invoices = await app.get(InvoicesRepository).findForRun(userId, runId);
@@ -72,12 +78,17 @@ async function main(): Promise<void> {
     expect(failures, spanish?.vendor?.phone === null, 'Spanish vendor phone is not on the document and must be null');
     expect(failures, spanish?.runId === runId, 'run_id must equal the thread id');
     expect(failures, isAmount(english?.total, '12.00'), 'English total should be 12.00');
-    expect(failures, triage.filter((email) => email.triage === 'not_invoice').length === 2, 'newsletter and shipping must be not_invoice');
+    expect(
+      failures,
+      triage.filter((email) => email.triage === 'not_invoice').length === 2,
+      'newsletter and shipping must be not_invoice',
+    );
 
     const followUp = await runner.run({
       userId,
       threadId: runId,
-      message: 'Without calling any tool: list the subjects of the emails you marked as not invoices in this conversation.',
+      message:
+        'Without calling any tool: list the subjects of the emails you marked as not invoices in this conversation.',
     });
     console.log('\nFollow-up on the same thread:\n', followUp);
     expect(failures, /tech|pedido|camino/i.test(followUp), 'the second invocation must remember the first one');

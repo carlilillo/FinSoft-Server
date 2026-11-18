@@ -1,10 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
+import type { InvoiceDirection } from '../invoices/domain/invoice-direction.js';
 import type { Amount } from '../invoices/domain/money.js';
 
 export interface ProductSummaryRow {
   id: string;
+  /** `received`: bought from the vendor (a provider); `issued`: sold to the vendor (a customer). */
+  direction: InvoiceDirection;
   displayName: string;
   sku: string | null;
   unit: string | null;
@@ -28,8 +31,13 @@ export interface PricePointRow {
   vatRate: number | null;
 }
 
+export interface ProductListFilters {
+  search?: string;
+  direction?: InvoiceDirection;
+}
+
 const SUMMARY_SELECT = `
-  SELECT p.id, p.display_name AS "displayName", p.sku, p.unit, p.vendor_id AS "vendorId", v.name AS "vendorName",
+  SELECT p.id, p.direction, p.display_name AS "displayName", p.sku, p.unit, p.vendor_id AS "vendorId", v.name AS "vendorName",
          COALESCE(stats.purchase_count, 0)::int AS "purchaseCount",
          last.unit_price_net::text AS "lastUnitPriceNet",
          last.unit_price_gross::text AS "lastUnitPriceGross",
@@ -53,25 +61,33 @@ const SUMMARY_SELECT = `
 export class ProductsRepository {
   constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
 
-  async list(userId: string, search: string | undefined, page: number, pageSize: number): Promise<[ProductSummaryRow[], number]> {
-    const term = search ? `%${search.replace(/[%_]/g, '\\$&')}%` : null;
-    const filter = `WHERE p.user_id = $1 AND ($2::text IS NULL OR p.display_name ILIKE $2 OR v.name ILIKE $2 OR p.sku ILIKE $2)`;
+  async list(
+    userId: string,
+    filters: ProductListFilters,
+    page: number,
+    pageSize: number,
+  ): Promise<[ProductSummaryRow[], number]> {
+    const term = filters.search ? `%${filters.search.replace(/[%_]/g, '\\$&')}%` : null;
+    const filter = `WHERE p.user_id = $1
+      AND ($2::text IS NULL OR p.display_name ILIKE $2 OR v.name ILIKE $2 OR p.sku ILIKE $2)
+      AND ($3::text IS NULL OR p.direction = $3)`;
+    const params = [userId, term, filters.direction ?? null];
     const rows = await this.dataSource.query<ProductSummaryRow[]>(
-      `${SUMMARY_SELECT} ${filter} ORDER BY last.issue_date DESC NULLS LAST, p.display_name ASC LIMIT $3 OFFSET $4`,
-      [userId, term, pageSize, (page - 1) * pageSize],
+      `${SUMMARY_SELECT} ${filter} ORDER BY last.issue_date DESC NULLS LAST, p.display_name ASC LIMIT $4 OFFSET $5`,
+      [...params, pageSize, (page - 1) * pageSize],
     );
     const [{ count }] = await this.dataSource.query<[{ count: string }]>(
       `SELECT count(*) FROM products p JOIN vendors v ON v.id = p.vendor_id ${filter}`,
-      [userId, term],
+      params,
     );
     return [rows, Number(count)];
   }
 
   async findSummary(userId: string, productId: string): Promise<ProductSummaryRow | null> {
-    const rows = await this.dataSource.query<ProductSummaryRow[]>(`${SUMMARY_SELECT} WHERE p.user_id = $1 AND p.id = $2`, [
-      userId,
-      productId,
-    ]);
+    const rows = await this.dataSource.query<ProductSummaryRow[]>(
+      `${SUMMARY_SELECT} WHERE p.user_id = $1 AND p.id = $2`,
+      [userId, productId],
+    );
     return rows[0] ?? null;
   }
 

@@ -5,6 +5,7 @@ import { AgentWorkspaceService } from '../agent/files/workspace.service.js';
 import { AppConfigService } from '../config/app-config.service.js';
 import { DomainError } from '../common/domain/domain-error.js';
 import { DocumentsService } from '../documents/documents.service.js';
+import { GmailService } from '../gmail/gmail.service.js';
 import { resolveImportOutcome } from '../imports/domain/import-file.js';
 import type { ImportFileEntity } from '../imports/entities/import-file.entity.js';
 import { ImportFilesRepository } from '../imports/import-files.repository.js';
@@ -36,6 +37,7 @@ export class AnalysisProcessor implements OnApplicationBootstrap {
     private readonly ingestion: AnalysisIngestionService,
     private readonly agent: AgentRunnerService,
     private readonly persistence: AgentPersistenceService,
+    private readonly gmail: GmailService,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -103,10 +105,11 @@ export class AnalysisProcessor implements OnApplicationBootstrap {
     await this.runs.save(run.toState());
     if (emails.length === 0) return;
 
+    const ownAddresses = [...(await this.gmail.accountAddresses(userId)).values()];
     await this.agent.run({
       userId,
       threadId: run.toState().id,
-      message: buildStartMessage(emails),
+      message: buildStartMessage(emails, ownAddresses),
     });
   }
 
@@ -115,7 +118,7 @@ export class AnalysisProcessor implements OnApplicationBootstrap {
    * element (and one thread) per file. On a retry only the documents still pending run again, resuming their threads.
    */
   private async runImport(run: AnalysisRun, userId: string): Promise<void> {
-    const runId = run.toState().id;
+    const { id: runId, invoiceDirection: direction } = run.toState();
     run.beginDocumentExtraction();
     await this.runs.save(run.toState());
 
@@ -125,9 +128,10 @@ export class AnalysisProcessor implements OnApplicationBootstrap {
         userId,
         runId,
         threadId: file.id,
+        direction,
         message: (await this.persistence.hasCheckpoint(file.id))
           ? null
-          : buildDocumentMessage(file.workspacePath, file.fileName, file.mimeType),
+          : buildDocumentMessage(file.workspacePath, file.fileName, file.mimeType, direction),
       })),
     );
     const results = await this.agent.extractDocuments(invocations, DOCUMENT_BATCH_CONCURRENCY);

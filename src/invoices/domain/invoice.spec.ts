@@ -2,6 +2,7 @@ import { createInvoice, type InvoiceDraft, type InvoiceLineDraft, validateInvoic
 import { InvalidInvoiceError, InvoiceTotalsMismatchError } from './invoice.errors.js';
 
 const spanishInvoice: InvoiceDraft = {
+  direction: 'received',
   invoiceNumber: ' F-2026/0042 ',
   issueDate: '2026-11-03',
   dueDate: null,
@@ -31,6 +32,10 @@ const line = (overrides: Partial<InvoiceLineDraft> = {}): InvoiceLineDraft => ({
 });
 
 describe('createInvoice', () => {
+  it('keeps the direction it was given', () => {
+    expect(createInvoice({ ...spanishInvoice, direction: 'issued' }).direction).toBe('issued');
+  });
+
   it('accepts subtotal + IVA - IRPF = total and normalizes number and currency', () => {
     const invoice = createInvoice(spanishInvoice);
     expect(invoice.invoiceNumber).toBe('F-2026/0042');

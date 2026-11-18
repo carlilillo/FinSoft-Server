@@ -14,10 +14,12 @@ import type { Amount } from '../domain/money.js';
 import { InvoiceLineEntity } from './invoice-line.entity.js';
 import { VendorEntity } from './vendor.entity.js';
 import type { InvoiceLanguage } from '../domain/invoice.js';
+import type { InvoiceDirection } from '../domain/invoice-direction.js';
 
 @Entity('invoices')
 @Index(['userId', 'issueDate'])
-@Index(['userId', 'vendorId', 'invoiceNumber'], {
+@Index(['userId', 'direction', 'issueDate'])
+@Index(['userId', 'direction', 'vendorId', 'invoiceNumber'], {
   unique: true,
   where: '"invoice_number" IS NOT NULL',
 })
@@ -43,6 +45,11 @@ export class InvoiceEntity {
   @Column({ ...ULID_COLUMN, name: 'import_file_id', nullable: true })
   importFileId: string | null;
 
+  /** Issued by the user to a customer, or received from a provider. */
+  @Column({ type: 'varchar', length: 8, default: 'received' })
+  direction: InvoiceDirection;
+
+  /** The other company on the invoice: the provider when received, the customer billed when issued. */
   @Column({ ...ULID_COLUMN, name: 'vendor_id' })
   vendorId: string;
 

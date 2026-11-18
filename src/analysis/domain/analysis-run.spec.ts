@@ -35,6 +35,7 @@ describe('AnalysisRun', () => {
         userId: 'user_1',
         active: imports(MAX_ACTIVE_RUNS),
         documentsTotal: 2,
+        direction: 'received',
       }),
     ).toThrow(RunLimitReachedError);
   });
@@ -55,8 +56,26 @@ describe('AnalysisRun', () => {
         userId: 'user_1',
         active: gmailRunning,
         documentsTotal: 1,
+        direction: 'received',
       }),
     ).not.toThrow();
+  });
+
+  it('only collects invoices received from providers when reading the inbox', () => {
+    expect(AnalysisRun.start({ id: 'run-1', userId: 'user_1', active: none }).toState().invoiceDirection).toBe(
+      'received',
+    );
+  });
+
+  it('keeps the kind of invoices the user chose to import', () => {
+    const run = AnalysisRun.startImport({
+      id: 'run-1',
+      userId: 'user_1',
+      active: none,
+      documentsTotal: 1,
+      direction: 'issued',
+    });
+    expect(run.toState().invoiceDirection).toBe('issued');
   });
 
   it('moves through ingestion, extraction and review', () => {
@@ -85,9 +104,11 @@ describe('AnalysisRun', () => {
       userId: 'user_1',
       active: none,
       documentsTotal: 4,
+      direction: 'received',
     });
     expect(run.toState()).toMatchObject({
       source: 'upload',
+      invoiceDirection: 'received',
       status: 'pending',
       documentsTotal: 4,
       emailsTotal: 0,
@@ -142,6 +163,7 @@ describe('AnalysisRun', () => {
       userId: 'user_1',
       active: none,
       documentsTotal: 1,
+      direction: 'received',
     });
     run.complete(now);
     expect(() => run.requestContinuation(none)).toThrow(ImportRunNotContinuableError);

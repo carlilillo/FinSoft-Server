@@ -1,19 +1,23 @@
 import { HttpException } from '@nestjs/common';
 import type { ToolRuntime } from 'langchain';
 import { DomainError } from '../../common/domain/domain-error.js';
+import { type InvoiceDirection, isInvoiceDirection } from '../../invoices/domain/invoice-direction.js';
 
 export interface RunScope {
   userId: string;
   /** LangGraph thread id = analysis run id. */
   threadId: string;
+  /** The kind of invoices this run stores, chosen by the user when the run was invoked. */
+  direction: InvoiceDirection;
 }
 
 /**
- * The user and thread always come from the runtime (context + configurable), never from the
- * model's arguments, so a tool can only ever touch the data of the run it belongs to.
+ * The user, thread and invoice direction always come from the runtime (context + configurable), never from the
+ * model's arguments, so a tool can only ever touch the data of the run it belongs to, and only store the kind of
+ * invoices the user asked for.
  */
 export function resolveRunScope(runtime: ToolRuntime): RunScope {
-  const context = (runtime.context ?? {}) as { userId?: unknown };
+  const context = (runtime.context ?? {}) as { userId?: unknown; direction?: unknown };
   const configurable = (runtime.configurable ?? runtime.config?.configurable ?? {}) as Record<string, unknown>;
   const executionInfo = (runtime as { executionInfo?: { threadId?: string } }).executionInfo;
 
@@ -22,11 +26,14 @@ export function resolveRunScope(runtime: ToolRuntime): RunScope {
   if (typeof userId !== 'string' || typeof threadId !== 'string') {
     throw new Error('Tool invoked outside of an analysis run (missing userId or thread_id)');
   }
-  return { userId, threadId };
+  const direction = context.direction ?? configurable.invoice_direction;
+  if (!isInvoiceDirection(direction)) throw new Error('Tool invoked without an invoice direction');
+  return { userId, threadId, direction };
 }
 
 export interface ImportScope {
   userId: string;
+  direction: InvoiceDirection;
   /** The extraction session the imported document belongs to. */
   runId: string;
   /** Imported file id = this document's LangGraph thread id. */
@@ -35,11 +42,11 @@ export interface ImportScope {
 
 /** Scope of a document-extractor thread: one imported document (PDF or image) of a session (`run_id` in configurable). */
 export function resolveImportScope(runtime: ToolRuntime): ImportScope {
-  const { userId, threadId } = resolveRunScope(runtime);
+  const { userId, threadId, direction } = resolveRunScope(runtime);
   const configurable = (runtime.configurable ?? runtime.config?.configurable ?? {}) as Record<string, unknown>;
   if (typeof configurable.run_id !== 'string')
     throw new Error('Tool invoked outside of an import run (missing run_id)');
-  return { userId, runId: configurable.run_id, importFileId: threadId };
+  return { userId, direction, runId: configurable.run_id, importFileId: threadId };
 }
 
 /** Emits a progress event on the "custom" stream (picked up by the run logger). */

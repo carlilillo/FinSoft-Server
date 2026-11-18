@@ -1,5 +1,6 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryColumn } from 'typeorm';
 import { CLERK_USER_ID_COLUMN, ULID_COLUMN } from '../../database/column-types.js';
+import type { InvoiceDirection } from '../../invoices/domain/invoice-direction.js';
 import type { RunSource, RunStatus } from '../domain/analysis-run.js';
 
 /** One extraction session. For Gmail sessions its id is also the LangGraph thread_id. */
@@ -14,6 +15,10 @@ export class AnalysisRunEntity {
 
   @Column({ type: 'varchar', length: 16, default: 'gmail' })
   source: RunSource;
+
+  /** The kind of invoices the session stores: Gmail sessions always store received ones; imports store the user's choice. */
+  @Column({ name: 'invoice_direction', type: 'varchar', length: 8, default: 'received' })
+  invoiceDirection: InvoiceDirection;
 
   @Column({ type: 'varchar', length: 24 })
   status: RunStatus;

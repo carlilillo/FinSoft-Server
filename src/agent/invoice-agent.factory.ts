@@ -4,6 +4,7 @@ import { CompositeBackend, createDeepAgent, StateBackend, StoreBackend, type Sub
 import { todoListMiddleware } from 'langchain';
 import { z } from 'zod';
 import { AppConfigService } from '../config/app-config.service.js';
+import { INVOICE_DIRECTIONS, type InvoiceDirection } from '../invoices/domain/invoice-direction.js';
 import { AgentPersistenceService } from './agent-persistence.service.js';
 import { INBOX_ROUTE, UPLOADS_ROUTE, type WorkspaceArea, workspaceNamespace } from './files/workspace-paths.js';
 import { nativeFileResultsMiddleware } from './middleware/native-file-results.middleware.js';
@@ -15,7 +16,16 @@ import { EXTRACTOR_AGENT_NAME, EXTRACTOR_DESCRIPTION, EXTRACTOR_SYSTEM_PROMPT } 
 import { TRIAGE_AGENT_NAME, TRIAGE_SYSTEM_PROMPT } from './prompts/triage.prompt.js';
 import { AgentToolsFactory } from './tools/agent-tools.factory.js';
 
-export const agentContextSchema = z.object({ userId: z.string() });
+/**
+ * Per-invocation context: whose run it is and which kind of invoices it stores (issued by the user, or received
+ * from providers). The tools read both from here, never from the model's arguments.
+ */
+export const agentContextSchema = z.object({
+  userId: z.string(),
+  direction: z.enum(INVOICE_DIRECTIONS as [InvoiceDirection, ...InvoiceDirection[]]),
+});
+
+export type AgentContext = z.infer<typeof agentContextSchema>;
 
 /** The inbox and uploads hold the user's original documents: the model reads them but never changes them. */
 const WORKSPACE_PERMISSIONS = [

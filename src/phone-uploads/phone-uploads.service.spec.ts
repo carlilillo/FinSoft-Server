@@ -69,7 +69,7 @@ describe('PhoneUploadsService', () => {
   describe('createOrReuse', () => {
     it('creates a link on the client app and stores its token only hashed and encrypted', async () => {
       const { service, tokenOf, row } = setup();
-      const { url } = await service.createOrReuse('user_1');
+      const { url } = await service.createOrReuse('user_1', 'received');
       expect(url).toMatch(/^https:\/\/app\.finsift\.test\/upload\/[A-Za-z0-9_-]{43}$/);
       const stored = row(tokenOf(url));
       expect(stored).toMatchObject({ userId: 'user_1', status: 'open' });
@@ -78,26 +78,35 @@ describe('PhoneUploadsService', () => {
 
     it('shows the same link again while it is open, instead of creating another one', async () => {
       const { service, rows } = setup();
-      const first = await service.createOrReuse('user_1');
+      const first = await service.createOrReuse('user_1', 'received');
       vi.setSystemTime(minutes(10));
-      const again = await service.createOrReuse('user_1');
+      const again = await service.createOrReuse('user_1', 'received');
       expect(again).toEqual(first);
       expect(rows.size).toBe(1);
     });
 
+    it('keeps separate links for your own invoices and for provider invoices', async () => {
+      const { service, rows } = setup();
+      const providers = await service.createOrReuse('user_1', 'received');
+      const own = await service.createOrReuse('user_1', 'issued');
+      expect(own.id).not.toBe(providers.id);
+      expect(await service.createOrReuse('user_1', 'issued')).toEqual(own);
+      expect(rows.size).toBe(2);
+    });
+
     it("never shows another user's link", async () => {
       const { service, rows } = setup();
-      const mine = await service.createOrReuse('user_1');
-      const theirs = await service.createOrReuse('user_2');
+      const mine = await service.createOrReuse('user_1', 'received');
+      const theirs = await service.createOrReuse('user_2', 'received');
       expect(theirs.url).not.toBe(mine.url);
       expect(rows.size).toBe(2);
     });
 
     it('creates a new link when the open one has less than 5 minutes left', async () => {
       const { service, rows } = setup();
-      const first = await service.createOrReuse('user_1');
+      const first = await service.createOrReuse('user_1', 'received');
       vi.setSystemTime(minutes(26));
-      const next = await service.createOrReuse('user_1');
+      const next = await service.createOrReuse('user_1', 'received');
       expect(next.id).not.toBe(first.id);
       expect(next.expiresAt).toEqual(minutes(56));
       expect(rows.size).toBe(2);
@@ -105,27 +114,27 @@ describe('PhoneUploadsService', () => {
 
     it('creates a new link once the previous one was used', async () => {
       const { service, tokenOf } = setup();
-      const first = await service.createOrReuse('user_1');
+      const first = await service.createOrReuse('user_1', 'received');
       await service.submit(tokenOf(first.url), files);
-      const next = await service.createOrReuse('user_1');
+      const next = await service.createOrReuse('user_1', 'received');
       expect(next.id).not.toBe(first.id);
     });
 
     it('does not reuse older links whose token was never stored', async () => {
       const { service, rows } = setup();
-      const first = await service.createOrReuse('user_1');
+      const first = await service.createOrReuse('user_1', 'received');
       for (const [hash, row] of rows) rows.set(hash, { ...row, tokenEnc: null });
-      const next = await service.createOrReuse('user_1');
+      const next = await service.createOrReuse('user_1', 'received');
       expect(next.id).not.toBe(first.id);
     });
   });
 
   it("imports the phone's files for the link's owner and disables the link", async () => {
     const { service, analysis, tokenOf, row } = setup();
-    const token = tokenOf((await service.createOrReuse('user_1')).url);
+    const token = tokenOf((await service.createOrReuse('user_1', 'received')).url);
 
     await expect(service.submit(token, files)).resolves.toEqual({ runId: 'run-1' });
-    expect(analysis.importDocuments).toHaveBeenCalledWith('user_1', files);
+    expect(analysis.importDocuments).toHaveBeenCalledWith('user_1', files, 'received');
     expect(row(token)).toMatchObject({ status: 'used', runId: 'run-1' });
 
     await expect(service.describe(token)).rejects.toThrow(PhoneUploadLinkUsedError);
@@ -133,9 +142,18 @@ describe('PhoneUploadsService', () => {
     expect(analysis.importDocuments).toHaveBeenCalledTimes(1);
   });
 
+  it('imports the invoices as the kind the link was created for', async () => {
+    const { service, analysis, tokenOf } = setup();
+    const token = tokenOf((await service.createOrReuse('user_1', 'issued')).url);
+
+    await expect(service.describe(token)).resolves.toMatchObject({ direction: 'issued' });
+    await service.submit(token, files);
+    expect(analysis.importDocuments).toHaveBeenCalledWith('user_1', files, 'issued');
+  });
+
   it('keeps the link open when the import is refused, so the phone can retry', async () => {
     const { service, analysis, tokenOf, row } = setup();
-    const token = tokenOf((await service.createOrReuse('user_1')).url);
+    const token = tokenOf((await service.createOrReuse('user_1', 'received')).url);
     analysis.importDocuments.mockRejectedValueOnce(new RunLimitReachedError(3));
 
     await expect(service.submit(token, files)).rejects.toThrow(RunLimitReachedError);
@@ -145,7 +163,7 @@ describe('PhoneUploadsService', () => {
 
   it('refuses an expired link, 30 minutes after it was created', async () => {
     const { service, analysis, tokenOf } = setup();
-    const token = tokenOf((await service.createOrReuse('user_1')).url);
+    const token = tokenOf((await service.createOrReuse('user_1', 'received')).url);
 
     vi.setSystemTime(minutes(30));
     await expect(service.describe(token)).rejects.toThrow(PhoneUploadLinkExpiredError);

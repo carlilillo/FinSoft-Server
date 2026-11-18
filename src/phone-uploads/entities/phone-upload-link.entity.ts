@@ -1,5 +1,6 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryColumn } from 'typeorm';
 import { CLERK_USER_ID_COLUMN, ULID_COLUMN } from '../../database/column-types.js';
+import type { InvoiceDirection } from '../../invoices/domain/invoice-direction.js';
 import type { StoredPhoneUploadLinkStatus } from '../domain/phone-upload-link.js';
 
 /** A single-use, 30-minute link (shown as a QR code) that lets the user's phone import invoices. */
@@ -19,6 +20,10 @@ export class PhoneUploadLinkEntity {
   /** The token, AES-256-GCM encrypted, so an open link's URL can be shown again. Null on older links. */
   @Column({ name: 'token_enc', type: 'text', nullable: true })
   tokenEnc: string | null;
+
+  /** The kind of invoices the phone sends: issued by the user, or received from providers. */
+  @Column({ name: 'invoice_direction', type: 'varchar', length: 8, default: 'received' })
+  invoiceDirection: InvoiceDirection;
 
   @Column({ type: 'varchar', length: 16, default: 'open' })
   status: StoredPhoneUploadLinkStatus;

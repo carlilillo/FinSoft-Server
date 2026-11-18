@@ -8,7 +8,12 @@ export class ProductsService {
   constructor(private readonly products: ProductsRepository) {}
 
   async list(userId: string, query: ListProductsQueryDto): Promise<Page<ProductSummaryRow>> {
-    const [items, total] = await this.products.list(userId, query.search, query.page, query.pageSize);
+    const [items, total] = await this.products.list(
+      userId,
+      { search: query.search, direction: query.direction },
+      query.page,
+      query.pageSize,
+    );
     return { items, total, page: query.page, pageSize: query.pageSize };
   }
 

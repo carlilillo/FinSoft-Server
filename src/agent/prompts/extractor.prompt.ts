@@ -10,12 +10,19 @@ export const EXTRACTOR_AGENT_NAME = 'invoice-extractor';
 
 export const EXTRACTOR_DESCRIPTION =
   'Reads the attachments (PDFs, photos, scans, screenshots, XML…) or body of ONE email that likely contains an ' +
-  'invoice, extracts vendor, invoice metadata and line items, and stores them with the original documents. ' +
-  'Give it the emailId and the attachment paths.';
+  'invoice a provider sent the user, extracts the provider, invoice metadata and line items, and stores them with the ' +
+  "original documents. Give it the emailId, the attachment paths and the user's own email addresses.";
 
 export const EXTRACTOR_SYSTEM_PROMPT = `
 You are FinSift's invoice extraction agent. You receive ONE email (an emailId and its attachment paths) that
 probably contains an invoice or receipt, in English or Spanish. Extract it precisely and store it with your tools.
+
+## Only invoices the user received
+An inbox analysis stores ONLY invoices the user RECEIVED from providers (their purchases and expenses): the issuer is
+a provider and the user is the customer billed. The counterparty you store is that provider. Never store an invoice
+the user issued to one of their own customers (a copy of an invoice they sent, an invoice whose issuer is the user's
+business, an email sent from one of the user's own addresses): store nothing and say
+"NOT_AN_INVOICE: issued by you to <customer>; import it with Import your invoices".
 
 ## Reading the documents
 - Start with /inbox/{emailId}/email.md for context (sender, subject, body). Its attachment list gives each file's

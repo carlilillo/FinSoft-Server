@@ -4,6 +4,7 @@ import {
   RunLimitReachedError,
   RunNotContinuableError,
 } from './analysis-run.errors.js';
+import type { InvoiceDirection } from '../../invoices/domain/invoice-direction.js';
 
 export type RunStatus = 'pending' | 'ingesting' | 'extracting' | 'awaiting_review' | 'failed';
 
@@ -14,6 +15,8 @@ export interface AnalysisRunState {
   id: string;
   userId: string;
   source: RunSource;
+  /** The kind of invoices the session stores: an inbox analysis only collects invoices received from providers. */
+  invoiceDirection: InvoiceDirection;
   status: RunStatus;
   stageDetail: string | null;
   emailsTotal: number;
@@ -63,6 +66,7 @@ export class AnalysisRun {
       id: props.id,
       userId: props.userId,
       source: 'gmail',
+      invoiceDirection: 'received',
       status: 'pending',
       stageDetail: 'Waiting to start',
       emailsTotal: 0,
@@ -73,13 +77,23 @@ export class AnalysisRun {
     });
   }
 
-  /** A session fed by invoice files (PDFs or images) the user imported: no inbox, every document goes straight to extraction. */
-  static startImport(props: { id: string; userId: string; active: ActiveRuns; documentsTotal: number }): AnalysisRun {
+  /**
+   * A session fed by invoice files (PDFs or images) the user imported: no inbox, every document goes straight to
+   * extraction. `direction` is the kind of invoices the user chose to import: issued by them, or received from providers.
+   */
+  static startImport(props: {
+    id: string;
+    userId: string;
+    active: ActiveRuns;
+    documentsTotal: number;
+    direction: InvoiceDirection;
+  }): AnalysisRun {
     assertCanStartRun(props.active);
     return new AnalysisRun({
       id: props.id,
       userId: props.userId,
       source: 'upload',
+      invoiceDirection: props.direction,
       status: 'pending',
       stageDetail: 'Waiting to start',
       emailsTotal: 0,

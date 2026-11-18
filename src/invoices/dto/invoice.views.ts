@@ -19,6 +19,7 @@ export function toVendorView(vendor: VendorEntity) {
 export function toInvoiceSummaryView(invoice: InvoiceEntity & { lineCount?: number }) {
   return {
     id: invoice.id,
+    direction: invoice.direction,
     invoiceNumber: invoice.invoiceNumber,
     issueDate: invoice.issueDate,
     dueDate: invoice.dueDate,

@@ -1,15 +1,20 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryColumn, type Relation } from 'typeorm';
 import { CLERK_USER_ID_COLUMN, ULID_COLUMN } from '../../database/column-types.js';
+import type { InvoiceDirection } from '../../invoices/domain/invoice-direction.js';
 import { VendorEntity } from '../../invoices/entities/vendor.entity.js';
 
 @Entity('products')
-@Index(['userId', 'vendorId', 'normalizedKey'], { unique: true })
+@Index(['userId', 'direction', 'vendorId', 'normalizedKey'], { unique: true })
 export class ProductEntity {
   @PrimaryColumn(ULID_COLUMN)
   id: string;
 
   @Column({ ...CLERK_USER_ID_COLUMN, name: 'user_id' })
   userId: string;
+
+  /** Bought from a provider (`received`) or sold to a customer (`issued`), like the invoices its lines come from. */
+  @Column({ type: 'varchar', length: 8, default: 'received' })
+  direction: InvoiceDirection;
 
   @Column({ ...ULID_COLUMN, name: 'vendor_id' })
   vendorId: string;

@@ -1,10 +1,13 @@
 import Big from 'big.js';
 import { InvalidInvoiceError, InvoiceTotalsMismatchError } from './invoice.errors.js';
+import type { InvoiceDirection } from './invoice-direction.js';
 import { type Amount, decimalPlaces, minorUnits, sumAmounts } from './money.js';
 
 export type InvoiceLanguage = 'en' | 'es' | 'other';
 
 export interface InvoiceDraft {
+  /** Set by the server from the session the invoice belongs to, never by the extraction model. */
+  direction: InvoiceDirection;
   invoiceNumber: string | null;
   issueDate: string;
   dueDate: string | null;

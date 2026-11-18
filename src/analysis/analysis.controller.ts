@@ -15,6 +15,7 @@ import type { AuthContext } from '../common/auth/auth.types.js';
 import { CurrentUser } from '../common/auth/current-user.decorator.js';
 import { UlidPipe } from '../common/pipes/ulid.pipe.js';
 import { MAX_IMPORT_FILES } from '../imports/domain/import-file.js';
+import { ImportDirectionDto } from '../invoices/dto/import-direction.dto.js';
 import {
   IMPORT_FILES_FIELD,
   IMPORT_UPLOAD_OPTIONS,
@@ -35,13 +36,20 @@ export class AnalysisController {
     return this.analysisService.start(auth.userId);
   }
 
-  /** Multipart upload (`files`, up to 10 PDFs or images) that starts an extraction session without Gmail. */
+  /**
+   * Multipart upload (`files`, up to 10 PDFs or images, plus an optional `direction` field: `issued` for invoices the
+   * user sent to customers, `received` by default) that starts an extraction session without Gmail.
+   */
   @Post('imports')
   @HttpCode(HttpStatus.ACCEPTED)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @UseInterceptors(FilesInterceptor(IMPORT_FILES_FIELD, MAX_IMPORT_FILES, IMPORT_UPLOAD_OPTIONS))
-  import(@CurrentUser() auth: AuthContext, @UploadedFiles() files: UploadedInvoiceFile[] | undefined) {
-    return this.analysisService.importDocuments(auth.userId, toIncomingFiles(files));
+  import(
+    @CurrentUser() auth: AuthContext,
+    @Body() dto: ImportDirectionDto,
+    @UploadedFiles() files: UploadedInvoiceFile[] | undefined,
+  ) {
+    return this.analysisService.importDocuments(auth.userId, toIncomingFiles(files), dto.direction);
   }
 
   @Get()

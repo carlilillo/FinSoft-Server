@@ -11,7 +11,9 @@ report values in the normalized formats required by the tools, never in the docu
 | Invoice number | Invoice no., Invoice #, Number | Nº de factura, Número, Núm., Serie y número |
 | Issue date | Invoice date, Date of issue | Fecha de factura, Fecha de emisión, Fecha de expedición |
 | Due date | Due date, Payment due | Fecha de vencimiento, Vencimiento |
-| Vendor tax id | VAT number, VAT ID, Tax ID, EIN | NIF, CIF, NIF-IVA, VAT |
+| Issuer (seller) | From, Seller, Supplier | Emisor, Proveedor, Datos del emisor |
+| Customer billed (buyer) | Bill to, Customer, Sold to | Cliente, Facturar a, Datos del cliente, Destinatario |
+| Tax id | VAT number, VAT ID, Tax ID, EIN | NIF, CIF, NIF-IVA, VAT |
 | Subtotal (net) | Subtotal, Net amount, Amount excl. VAT | Base imponible, Subtotal, Importe neto |
 | VAT | VAT, Sales tax, Tax | IVA, Cuota de IVA, Impuestos |
 | Equivalence surcharge | — | Recargo de equivalencia (R.E.) — add it to VAT |

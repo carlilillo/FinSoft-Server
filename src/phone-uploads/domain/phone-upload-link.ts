@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { DomainError } from '../../common/domain/domain-error.js';
+import type { InvoiceDirection } from '../../invoices/domain/invoice-direction.js';
 
 /** A phone upload link works for 30 minutes after the QR code is shown, and only once. */
 export const PHONE_UPLOAD_LINK_TTL_MS = 30 * 60 * 1000;
@@ -26,6 +27,8 @@ export interface PhoneUploadLinkState {
    * links created before links were reused: those can't be shown again.
    */
   tokenEnc: string | null;
+  /** The kind of invoices the phone sends: issued by the user to customers, or received from providers. */
+  invoiceDirection: InvoiceDirection;
   status: StoredPhoneUploadLinkStatus;
   /** The extraction session the phone's invoices started, once they are sent. */
   runId: string | null;
@@ -69,6 +72,7 @@ export class PhoneUploadLink {
     userId: string;
     tokenHash: string;
     tokenEnc: string;
+    direction: InvoiceDirection;
     now: Date;
   }): PhoneUploadLink {
     return new PhoneUploadLink({
@@ -76,6 +80,7 @@ export class PhoneUploadLink {
       userId: params.userId,
       tokenHash: params.tokenHash,
       tokenEnc: params.tokenEnc,
+      invoiceDirection: params.direction,
       status: 'open',
       runId: null,
       expiresAt: new Date(params.now.getTime() + PHONE_UPLOAD_LINK_TTL_MS),
@@ -120,8 +125,17 @@ export class PhoneUploadLink {
   }
 }
 
-/** The user's link to show again, if any: the reusable one with the most time left. */
-export function findReusableLink(links: PhoneUploadLinkState[], now: Date): PhoneUploadLinkState | null {
-  const reusable = links.filter((link) => PhoneUploadLink.from(link).isReusableAt(now));
+/**
+ * The user's link to show again, if any: the reusable one with the most time left among those that import the same
+ * kind of invoices (a link for the user's own invoices is never shown for provider invoices, and the other way round).
+ */
+export function findReusableLink(
+  links: PhoneUploadLinkState[],
+  now: Date,
+  direction: InvoiceDirection,
+): PhoneUploadLinkState | null {
+  const reusable = links.filter(
+    (link) => link.invoiceDirection === direction && PhoneUploadLink.from(link).isReusableAt(now),
+  );
   return reusable.toSorted((a, b) => b.expiresAt.getTime() - a.expiresAt.getTime())[0] ?? null;
 }

@@ -9,11 +9,19 @@ import {
   PhoneUploadLinkExpiredError,
   PhoneUploadLinkUsedError,
 } from './phone-upload-link.js';
+import type { InvoiceDirection } from '../../invoices/domain/invoice-direction.js';
 
 const now = new Date('2026-11-12T10:00:00Z');
 const later = (ms: number) => new Date(now.getTime() + ms);
-const newLink = (id = 'link-1', createdAt = now) =>
-  PhoneUploadLink.create({ id, userId: 'user_1', tokenHash: `hash-${id}`, tokenEnc: `enc-${id}`, now: createdAt });
+const newLink = (id = 'link-1', createdAt = now, direction: InvoiceDirection = 'received') =>
+  PhoneUploadLink.create({
+    id,
+    userId: 'user_1',
+    tokenHash: `hash-${id}`,
+    tokenEnc: `enc-${id}`,
+    direction,
+    now: createdAt,
+  });
 
 describe('PhoneUploadLink', () => {
   it('opens for 30 minutes', () => {
@@ -73,12 +81,18 @@ describe('reusing an open link', () => {
     const older = newLink('older', now).toState();
     const newer = newLink('newer', later(60_000)).toState();
     const legacy = { ...newLink('legacy', later(120_000)).toState(), tokenEnc: null };
-    expect(findReusableLink([older, legacy, newer], later(90_000))?.id).toBe('newer');
+    expect(findReusableLink([older, legacy, newer], later(90_000), 'received')?.id).toBe('newer');
   });
 
   it('finds nothing when every link is too close to its expiry', () => {
-    expect(findReusableLink([newLink().toState()], later(PHONE_UPLOAD_LINK_TTL_MS - 60_000))).toBeNull();
-    expect(findReusableLink([], now)).toBeNull();
+    expect(findReusableLink([newLink().toState()], later(PHONE_UPLOAD_LINK_TTL_MS - 60_000), 'received')).toBeNull();
+    expect(findReusableLink([], now, 'received')).toBeNull();
+  });
+
+  it('only reuses a link that imports the same kind of invoices', () => {
+    const ownInvoices = newLink('own', now, 'issued').toState();
+    expect(findReusableLink([ownInvoices], now, 'received')).toBeNull();
+    expect(findReusableLink([ownInvoices], now, 'issued')?.id).toBe('own');
   });
 });
 

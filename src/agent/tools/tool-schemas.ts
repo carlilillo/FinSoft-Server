@@ -15,15 +15,20 @@ export const recordTriageSchema = z.object({
 
 export const saveInvoiceSchema = z.object({
   emailId: ulid.describe('The email the invoice came from'),
-  vendor: z.object({
-    name: z.string().min(1).describe('Legal or trading name of the issuer'),
-    taxId: nullableText('VAT number / NIF / CIF exactly as printed, or null'),
-    address: nullableText('Postal address on one line, or null'),
-    email: nullableText('Vendor contact email, or null'),
-    phone: nullableText('Vendor phone, or null'),
-    website: nullableText('Vendor website, or null'),
-    country: nullableText('ISO 3166-1 alpha-2 country code (ES, GB, US…), or null'),
-  }),
+  counterparty: z
+    .object({
+      name: z.string().min(1).describe('Legal or trading name of the counterparty'),
+      taxId: nullableText('Its VAT number / NIF / CIF exactly as printed, or null'),
+      address: nullableText('Its postal address on one line, or null'),
+      email: nullableText('Its contact email, or null'),
+      phone: nullableText('Its phone, or null'),
+      website: nullableText('Its website, or null'),
+      country: nullableText('ISO 3166-1 alpha-2 country code (ES, GB, US…), or null'),
+    })
+    .describe(
+      'The other company on the invoice, never the user: the provider who issued it when the user received it, or ' +
+        'the customer billed (bill to / cliente / facturar a) when the user issued it',
+    ),
   invoiceNumber: nullableText('Invoice number including series, or null if the document has none'),
   issueDate: z.string().describe('ISO date YYYY-MM-DD'),
   dueDate: nullableText('ISO date YYYY-MM-DD, or null'),

@@ -1,15 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
+import { Brackets, type FindOptionsWhere, Repository } from 'typeorm';
 import { InvoiceLineEntity } from './entities/invoice-line.entity.js';
 import { InvoiceEntity } from './entities/invoice.entity.js';
+import type { InvoiceDirection } from './domain/invoice-direction.js';
 import type { ListInvoicesQueryDto } from './dto/list-invoices.query.js';
 
 @Injectable()
 export class InvoicesRepository {
   constructor(@InjectRepository(InvoiceEntity) private readonly repo: Repository<InvoiceEntity>) {}
 
-  async list(userId: string, query: ListInvoicesQueryDto): Promise<[Array<InvoiceEntity & { lineCount: number }>, number]> {
+  async list(
+    userId: string,
+    query: ListInvoicesQueryDto,
+  ): Promise<[Array<InvoiceEntity & { lineCount: number }>, number]> {
     const qb = this.repo
       .createQueryBuilder('invoice')
       .leftJoinAndSelect('invoice.vendor', 'vendor')
@@ -19,6 +23,7 @@ export class InvoicesRepository {
       .skip((query.page - 1) * query.pageSize)
       .take(query.pageSize);
 
+    if (query.direction) qb.andWhere('invoice.direction = :direction', { direction: query.direction });
     if (query.vendorId) qb.andWhere('invoice.vendorId = :vendorId', { vendorId: query.vendorId });
     if (query.runId) qb.andWhere('invoice.runId = :runId', { runId: query.runId });
     if (query.from) qb.andWhere('invoice.issueDate >= :from', { from: query.from });
@@ -74,20 +79,38 @@ export class InvoicesRepository {
       .then((rows) => rows.map((row) => row.id));
   }
 
-  findForSpend(userId: string, from: string, to: string): Promise<Array<Pick<InvoiceEntity, 'issueDate' | 'currency' | 'total'>>> {
+  findForCashFlow(
+    userId: string,
+    from: string,
+    to: string,
+  ): Promise<Array<Pick<InvoiceEntity, 'direction' | 'issueDate' | 'currency' | 'total'>>> {
     return this.repo
       .createQueryBuilder('invoice')
-      .select(['invoice.issueDate', 'invoice.currency', 'invoice.total'])
+      .select(['invoice.direction', 'invoice.issueDate', 'invoice.currency', 'invoice.total'])
       .where('invoice.userId = :userId', { userId })
       .andWhere('invoice.issueDate BETWEEN :from AND :to', { from, to })
       .getMany();
   }
 
-  findRecent(userId: string, limit: number): Promise<InvoiceEntity[]> {
-    return this.repo.find({ where: { userId }, relations: { vendor: true }, order: { issueDate: 'DESC', id: 'DESC' }, take: limit });
+  /** Newest invoices first; `direction` keeps only those the user issued or received. */
+  findRecent(userId: string, limit: number, direction?: InvoiceDirection): Promise<InvoiceEntity[]> {
+    return this.repo.find({
+      where: ownedWhere(userId, direction),
+      relations: { vendor: true },
+      order: { issueDate: 'DESC', id: 'DESC' },
+      take: limit,
+    });
   }
 
-  countForUser(userId: string): Promise<number> {
-    return this.repo.count({ where: { userId } });
+  countForUser(userId: string, direction?: InvoiceDirection): Promise<number> {
+    return this.repo.count({ where: ownedWhere(userId, direction) });
   }
+}
+
+/**
+ * The user's invoices, optionally of one direction. TypeORM refuses `undefined` in a where condition, so the
+ * direction is only added when there is one.
+ */
+function ownedWhere(userId: string, direction?: InvoiceDirection): FindOptionsWhere<InvoiceEntity> {
+  return direction ? { userId, direction } : { userId };
 }

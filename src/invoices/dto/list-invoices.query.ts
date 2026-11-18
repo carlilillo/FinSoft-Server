@@ -1,11 +1,17 @@
-import { IsDateString, IsOptional, IsString, Length, MaxLength } from 'class-validator';
+import { IsDateString, IsIn, IsOptional, IsString, Length, MaxLength } from 'class-validator';
 import { PaginationQueryDto } from '../../common/dto/pagination.dto.js';
+import { INVOICE_DIRECTIONS, type InvoiceDirection } from '../domain/invoice-direction.js';
 
 export class ListInvoicesQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsString()
   @MaxLength(120)
   search?: string;
+
+  /** Only invoices the user issued, or only those received from providers; omitted, both. */
+  @IsOptional()
+  @IsIn(INVOICE_DIRECTIONS)
+  direction?: InvoiceDirection;
 
   @IsOptional()
   @IsString()

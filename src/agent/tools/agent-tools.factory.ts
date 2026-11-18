@@ -75,6 +75,7 @@ export class AgentToolsFactory {
           const saved = await this.writer.saveInvoice(
             {
               userId: scope.userId,
+              direction: scope.direction,
               runId: scope.threadId,
               emailId,
               gmailConnectionId: email.gmailConnectionId,
@@ -93,7 +94,9 @@ export class AgentToolsFactory {
         }),
       {
         name: 'save_invoice',
-        description: 'Store the invoice header and vendor. Amounts are decimal strings; returns the invoiceId.',
+        description:
+          'Store the invoice header and its counterparty (the provider who billed the user). Amounts are decimal strings; ' +
+          'returns the invoiceId.',
         schema: saveInvoiceSchema,
       },
     );
@@ -107,6 +110,7 @@ export class AgentToolsFactory {
           const saved = await this.writer.saveInvoice(
             {
               userId: scope.userId,
+              direction: scope.direction,
               runId: scope.runId,
               emailId: null,
               gmailConnectionId: null,
@@ -125,7 +129,9 @@ export class AgentToolsFactory {
         }),
       {
         name: 'save_invoice',
-        description: 'Store the invoice header and vendor. Amounts are decimal strings; returns the invoiceId.',
+        description:
+          'Store the invoice header and its counterparty (the provider who billed the user, or the customer the user ' +
+          'billed). Amounts are decimal strings; returns the invoiceId.',
         schema: saveImportedInvoiceSchema,
       },
     );
